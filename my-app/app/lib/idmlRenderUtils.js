@@ -25,8 +25,25 @@ export function renderOval(element, colors, stories, offsets) {
   containerDiv.setAttribute("data-shape-type", "oval");
 
   // Get dimensions from the element
-  const width = Math.max(element.bounds?.width || 0, 1);
-  const height = Math.max(element.bounds?.height || 0, 1);
+  let width = Math.max(element.bounds?.width || 0, 1);
+  let height = Math.max(element.bounds?.height || 0, 1);
+
+  // If bounds are very small or zero, try to get dimensions from transform
+  if (width <= 1 || height <= 1) {
+    if (element.transform) {
+      const transformWidth = Math.abs(element.transform.a) || 0;
+      const transformHeight = Math.abs(element.transform.d) || 0;
+      if (transformWidth > 1) width = transformWidth;
+      if (transformHeight > 1) height = transformHeight;
+    }
+  }
+
+  // Log oval rendering info
+  console.log(
+    `Rendering oval: ${width}×${height}, isDefault: ${
+      element.isDefaultOval || false
+    }`
+  );
 
   // Create SVG element
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -42,33 +59,77 @@ export function renderOval(element, colors, stories, offsets) {
     `${-padding} ${-padding} ${width + padding * 2} ${height + padding * 2}`
   );
 
-  // For ovals, create an ellipse element
-  const ellipse = document.createElementNS(
+  // For ovals, use path data to create accurate shape based on Bézier curves
+  console.log("Creating oval with path data from Bézier curves");
+  const shapeElement = document.createElementNS(
     "http://www.w3.org/2000/svg",
-    "ellipse"
+    "path"
   );
-  ellipse.setAttribute("cx", width / 2);
-  ellipse.setAttribute("cy", height / 2);
-  ellipse.setAttribute("rx", width / 2);
-  ellipse.setAttribute("ry", height / 2);
 
-  // Apply styling
+  // Generate path data from points
+  const points = element.bounds.points;
+  let pathData = "";
+
+  for (let i = 0; i < points.length; i++) {
+    const point = points[i];
+    const anchor = point.anchor;
+    const leftControl = point.leftDirection;
+    const rightControl = point.rightDirection;
+
+    // Adjust coordinates relative to the bounds origin
+    const x = anchor[0] - element.bounds.x;
+    const y = anchor[1] - element.bounds.y;
+
+    if (i === 0) {
+      // Move to first point
+      pathData += `M ${x} ${y} `;
+    } else {
+      const prevPoint = points[i - 1];
+      const prevRightControl = prevPoint.rightDirection;
+      const prevRightX = prevRightControl[0] - element.bounds.x;
+      const prevRightY = prevRightControl[1] - element.bounds.y;
+
+      const leftControlX = leftControl[0] - element.bounds.x;
+      const leftControlY = leftControl[1] - element.bounds.y;
+
+      // Always use bezier curves for ovals to get smooth curves
+      pathData += `C ${prevRightX} ${prevRightY}, ${leftControlX} ${leftControlY}, ${x} ${y} `;
+    }
+  }
+
+  // Close the path for ovals
+  if (points.length > 2) {
+    const firstPoint = points[0];
+    const lastPoint = points[points.length - 1];
+    const firstAnchorX = firstPoint.anchor[0] - element.bounds.x;
+    const firstAnchorY = firstPoint.anchor[1] - element.bounds.y;
+    const lastRightControlX = lastPoint.rightDirection[0] - element.bounds.x;
+    const lastRightControlY = lastPoint.rightDirection[1] - element.bounds.y;
+    const firstLeftControlX = firstPoint.leftDirection[0] - element.bounds.x;
+    const firstLeftControlY = firstPoint.leftDirection[1] - element.bounds.y;
+
+    pathData += `C ${lastRightControlX} ${lastRightControlY}, ${firstLeftControlX} ${firstLeftControlY}, ${firstAnchorX} ${firstAnchorY} Z`;
+  }
+
+  shapeElement.setAttribute("d", pathData);
+
+  // Apply styling to the shape element
   if (element.fillColor) {
     const fillColor = resolveSwatchRGB(colors, element.fillColor);
-    ellipse.setAttribute("fill", fillColor || "none");
+    shapeElement.setAttribute("fill", fillColor || "none");
   } else {
-    ellipse.setAttribute("fill", "none");
+    shapeElement.setAttribute("fill", "none");
   }
 
   if (element.strokeWeight > 0 && element.strokeColor) {
     const strokeColor = resolveSwatchRGB(colors, element.strokeColor);
-    ellipse.setAttribute("stroke", strokeColor || "black");
-    ellipse.setAttribute("stroke-width", element.strokeWeight);
+    shapeElement.setAttribute("stroke", strokeColor || "black");
+    shapeElement.setAttribute("stroke-width", element.strokeWeight);
   } else {
-    ellipse.setAttribute("stroke", "none");
+    shapeElement.setAttribute("stroke", "none");
   }
 
-  svg.appendChild(ellipse);
+  svg.appendChild(shapeElement);
   containerDiv.appendChild(svg);
 
   // Add debug info
@@ -81,12 +142,20 @@ export function renderOval(element, colors, stories, offsets) {
     debugInfo.style.fontSize = "10px";
     debugInfo.style.padding = "2px";
     debugInfo.style.pointerEvents = "none";
-    debugInfo.textContent = `Oval: ${width}×${height}`;
+    debugInfo.textContent = `Oval: ${width}×${height} (${
+      element.bounds?.points?.length || 0
+    } pts)`;
     containerDiv.appendChild(debugInfo);
   }
 
   // Apply element styles to position the container
   applyElementStyles(containerDiv, element, colors, offsets);
+
+  // For ovals, override the width/height constraints to allow natural ellipse shape
+  containerDiv.style.width = "auto";
+  containerDiv.style.height = "auto";
+  containerDiv.style.minWidth = `${width}px`;
+  containerDiv.style.minHeight = `${height}px`;
 
   return containerDiv;
 }
@@ -107,19 +176,45 @@ export function renderPolygon(element, colors, stories, offsets) {
   // Add shape type for debugging
   containerDiv.setAttribute("data-shape-type", element.type || "unknown");
 
+  // Log what we're rendering
+  console.log(
+    `Rendering ${element.type || "unknown"} shape:`,
+    element.name,
+    `bounds:`,
+    element.bounds,
+    `points:`,
+    element.bounds?.points?.length || 0
+  );
+
   // Extract points data from the polygon
   if (
     !element.bounds ||
     !element.bounds.points ||
     element.bounds.points.length === 0
   ) {
-    console.log(
-      "Fallback to rectangle for:",
-      element.type,
-      element.name,
-      "Missing points data"
-    );
-    const fallbackBox = renderBox(element, colors, offsets); // Fallback to rectangle if no points
+    console.log("Missing points data for:", element.type, element.name);
+
+    // If this is an oval type, render as ellipse instead of rectangle
+    if (element.type === "oval") {
+      console.log("Rendering oval without points as ellipse");
+      return renderOval(element, colors, stories, offsets);
+    }
+
+    // For other Bézier-like shapes, try to create a basic shape if we have bounds
+    if (
+      element.bounds &&
+      (element.bounds.width > 0 || element.bounds.height > 0)
+    ) {
+      console.log("Creating basic shape with available bounds");
+      const basicDiv = renderBox(element, colors, offsets);
+      basicDiv.setAttribute("data-fallback", "bounds-only");
+      basicDiv.setAttribute("data-original-type", element.type || "unknown");
+      return basicDiv;
+    }
+
+    // For other shapes, fallback to rectangle
+    console.log("Fallback to rectangle for:", element.type);
+    const fallbackBox = renderBox(element, colors, offsets);
     fallbackBox.setAttribute("data-fallback", "true");
     fallbackBox.setAttribute("data-original-type", element.type || "unknown");
     return fallbackBox;
@@ -494,6 +589,7 @@ export function applyElementStyles(
   // Apply background color only for non-SVG elements
   if (
     element.type !== "polygon" &&
+    element.type !== "oval" &&
     element.fillColor &&
     colors[element.fillColor]
   ) {
@@ -501,7 +597,7 @@ export function applyElementStyles(
   }
 
   // Apply border only for non-SVG elements
-  if (element.type !== "polygon") {
+  if (element.type !== "polygon" && element.type !== "oval") {
     if (
       element.strokeWeight > 0 &&
       element.strokeColor &&

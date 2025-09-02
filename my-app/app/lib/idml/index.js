@@ -175,6 +175,79 @@ export class IDMLParser {
   }
 
   /**
+   * Recursively extract shapes from a container (like groups, rectangles with nested content)
+   * @param {Object} container - The container object to search
+   * @param {Array} elements - Array to add found elements to
+   */
+  extractNestedShapes(container, elements) {
+    if (!container) return;
+
+    console.log(
+      "Extracting nested shapes from container:",
+      container?.["@_Self"] || "unknown"
+    );
+
+    // Check for nested groups
+    if (container.Group) {
+      const groups = Array.isArray(container.Group)
+        ? container.Group
+        : [container.Group];
+      console.log(`Found ${groups.length} nested groups`);
+      for (const group of groups) {
+        this.extractNestedShapes(group, elements);
+      }
+    }
+
+    // Check for nested rectangles
+    if (container.Rectangle) {
+      const rects = Array.isArray(container.Rectangle)
+        ? container.Rectangle
+        : [container.Rectangle];
+      console.log(`Found ${rects.length} nested rectangles`);
+      for (const rect of rects) {
+        elements.push(parseRectangle(rect));
+        this.extractNestedShapes(rect, elements); // Recursively check inside rectangles
+      }
+    }
+
+    // Check for nested polygons
+    if (container.Polygon) {
+      const polys = Array.isArray(container.Polygon)
+        ? container.Polygon
+        : [container.Polygon];
+      console.log(`Found ${polys.length} nested polygons`);
+      for (const poly of polys) {
+        elements.push(parsePolygon(poly));
+        this.extractNestedShapes(poly, elements); // Recursively check inside polygons
+      }
+    }
+
+    // Check for nested ovals
+    if (container.Oval) {
+      const ovals = Array.isArray(container.Oval)
+        ? container.Oval
+        : [container.Oval];
+      console.log(`Found ${ovals.length} nested ovals`);
+      for (const oval of ovals) {
+        elements.push(parseOval(oval));
+        this.extractNestedShapes(oval, elements); // Recursively check inside ovals
+      }
+    }
+
+    // Check for nested text frames
+    if (container.TextFrame) {
+      const frames = Array.isArray(container.TextFrame)
+        ? container.TextFrame
+        : [container.TextFrame];
+      console.log(`Found ${frames.length} nested text frames`);
+      for (const frame of frames) {
+        elements.push(parseTextFrame(frame));
+        this.extractNestedShapes(frame, elements); // Recursively check inside text frames
+      }
+    }
+  }
+
+  /**
    * Get all elements from all spreads
    * @returns {Array} All parsed elements from the document
    */
@@ -197,38 +270,62 @@ export class IDMLParser {
       console.log("Spread object exists:", !!spread);
       if (!spread) continue;
 
-      // TextFrames
+      // TextFrames (top-level)
       const frames = Array.isArray(spread.TextFrame)
         ? spread.TextFrame
         : spread.TextFrame
         ? [spread.TextFrame]
         : [];
-      for (const frame of frames) elements.push(parseTextFrame(frame));
+      for (const frame of frames) {
+        elements.push(parseTextFrame(frame));
+        this.extractNestedShapes(frame, elements); // Check for nested shapes
+      }
 
-      // Rectangles
+      // Rectangles (top-level)
       const rects = Array.isArray(spread.Rectangle)
         ? spread.Rectangle
         : spread.Rectangle
         ? [spread.Rectangle]
         : [];
-      for (const r of rects) elements.push(parseRectangle(r));
+      for (const r of rects) {
+        elements.push(parseRectangle(r));
+        this.extractNestedShapes(r, elements); // Check for nested shapes
+      }
 
-      // Polygons
+      // Polygons (top-level)
       const polys = Array.isArray(spread.Polygon)
         ? spread.Polygon
         : spread.Polygon
         ? [spread.Polygon]
         : [];
-      for (const p of polys) elements.push(parsePolygon(p));
+      for (const p of polys) {
+        elements.push(parsePolygon(p));
+        this.extractNestedShapes(p, elements); // Check for nested shapes
+      }
 
-      // Ovals
+      // Ovals (top-level)
       const ovals = Array.isArray(spread.Oval)
         ? spread.Oval
         : spread.Oval
         ? [spread.Oval]
         : [];
-      for (const o of ovals) elements.push(parseOval(o));
+      for (const o of ovals) {
+        elements.push(parseOval(o));
+        this.extractNestedShapes(o, elements); // Check for nested shapes
+      }
+
+      // Groups (top-level)
+      const groups = Array.isArray(spread.Group)
+        ? spread.Group
+        : spread.Group
+        ? [spread.Group]
+        : [];
+      for (const group of groups) {
+        this.extractNestedShapes(group, elements); // Groups don't get rendered directly, just extract their contents
+      }
     }
+
+    console.log(`Total elements found (including nested): ${elements.length}`);
     return elements;
   }
 }

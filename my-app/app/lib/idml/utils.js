@@ -37,10 +37,33 @@ export function parseGeometry(pathGeometry) {
   const geometryType = pathGeometry?.GeometryPathType || null;
   console.log("GeometryPathType:", geometryType ? "exists" : "not found");
 
+  // Log the full pathGeometry structure for debugging
+  if (typeof window !== "undefined" && window.DEBUG_IDML_SHAPES) {
+    console.log("Full pathGeometry:", JSON.stringify(pathGeometry, null, 2));
+  }
+
   // Get the path points
   const pts = pathGeometry?.GeometryPathType?.PathPointArray?.PathPointType;
   if (!pts) {
     console.log("No PathPointType found in geometry");
+
+    // Check if we have GeometryBounds as fallback
+    const geomBounds = pathGeometry?.GeometryBounds;
+    if (geomBounds) {
+      console.log("Found GeometryBounds as fallback:", geomBounds);
+      const bounds_str = String(geomBounds || "0 0 100 70");
+      const [y1, x1, y2, x2] = bounds_str.split(" ").map(Number);
+      if (isFinite(x2) && isFinite(x1) && isFinite(y2) && isFinite(y1)) {
+        return {
+          x: Math.min(x1, x2),
+          y: Math.min(y1, y2),
+          width: Math.abs(x2 - x1),
+          height: Math.abs(y2 - y1),
+          points: [], // No points available, but we have bounds
+        };
+      }
+    }
+
     return null;
   }
 

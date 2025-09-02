@@ -126,10 +126,12 @@ export default function Home() {
           </div>
         )}
 
-        {result?.files?.length > 0 && result.files[0].xmlJson && (
+        {result?.files?.length > 0 && result.files.find((f) => f.xmlJson) && (
           <div style={{ marginTop: 24 }}>
             <h2>Rendered preview</h2>
-            <IDMLViewer idmlJson={result.files[0].xmlJson} />
+            <IDMLViewer
+              idmlJson={result.files.find((f) => f.xmlJson).xmlJson}
+            />
           </div>
         )}
 

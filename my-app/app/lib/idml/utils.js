@@ -175,8 +175,17 @@ export function parseBaseShape(element, type) {
     name: element?.["@_Name"],
     visible: element?.["@_Visible"] !== "false",
     fillColor: element?.["@_FillColor"],
+    fillTint:
+      element?.["@_FillTint"] !== undefined && element?.["@_FillTint"] !== ""
+        ? Number(element?.["@_FillTint"])
+        : undefined,
     strokeColor: element?.["@_StrokeColor"],
     strokeWeight: parseFloat(element?.["@_StrokeWeight"]) || 0,
+    strokeTint:
+      element?.["@_StrokeTint"] !== undefined &&
+      element?.["@_StrokeTint"] !== ""
+        ? Number(element?.["@_StrokeTint"])
+        : undefined,
   };
 }
 

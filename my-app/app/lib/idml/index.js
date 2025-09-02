@@ -66,10 +66,19 @@ export class IDMLParser {
     }
 
     console.log("Color data found:", !!colorData);
+    // Gather base Color swatches
     const swatches = Array.isArray(colorData)
       ? colorData
       : colorData
       ? [colorData]
+      : [];
+
+    // Also pull any colors embedded in ColorGroup -> ColorGroupSwatch
+    const colorGroup = this.data[key]?.["idPkg:Graphic"]?.ColorGroup;
+    const groupSwatches = Array.isArray(colorGroup?.ColorGroupSwatch)
+      ? colorGroup.ColorGroupSwatch
+      : colorGroup?.ColorGroupSwatch
+      ? [colorGroup.ColorGroupSwatch]
       : [];
 
     const put = (k, entry) => {
@@ -77,9 +86,10 @@ export class IDMLParser {
       if (!colors[k]) colors[k] = entry;
     };
 
-    for (const sw of swatches) {
-      const selfId = sw?.["@_Self"]; // e.g., Color/Black or Color/C=0 M=0 Y=100 K=0
-      const name = sw?.["@_Name"]; // e.g., Black or C=0 M=0 Y=100 K=0
+    // Helper to register a swatch from a Color element
+    const putColor = (sw) => {
+      const selfId = sw?.["@_Self"]; // e.g., Color/Black
+      const name = sw?.["@_Name"]; // e.g., Black
       const space = String(sw?.["@_Space"] || "").toUpperCase();
       const valueStr = String(sw?.["@_ColorValue"] || "").trim();
       const values = valueStr
@@ -90,7 +100,11 @@ export class IDMLParser {
       const rgb = convertToCssRGB(space, values);
       const entry = { space, values, rgb };
 
-      // Key by multiple common references
+      const put = (k, entry) => {
+        if (!k) return;
+        if (!colors[k]) colors[k] = entry;
+      };
+
       put(selfId, entry);
       put(name, entry);
       if (selfId && selfId.startsWith("Color/"))
@@ -98,8 +112,37 @@ export class IDMLParser {
       if (name && name.startsWith("Color/"))
         put(name.replace(/^Color\//, ""), entry);
       const cmykNameMatch =
-        name && name.match(/^C=\\d+\\s+M=\\d+\\s+Y=\\d+\\s+K=\\d+$/);
+        name && name.match(/^C=\d+\s+M=\d+\s+Y=\d+\s+K=\d+$/);
       if (cmykNameMatch) put(cmykNameMatch[0], entry);
+    };
+
+    for (const sw of swatches) {
+      putColor(sw);
+    }
+
+    // Register colors referenced by ColorGroupSwatch entries (they point to swatch items)
+    for (const gsw of groupSwatches) {
+      const ref = gsw?.["@_SwatchItemRef"]; // e.g., Color/C=6 M=66 Y=98 K=3
+      if (ref && colors[ref]) continue; // already present
+      if (ref && String(ref).startsWith("Color/")) {
+        // Attempt to synthesize from the name if it's a CMYK string
+        const name = ref.replace(/^Color\//, "");
+        let values = null;
+        let m = name.match(/^C=(\d+)\s*M=(\d+)\s*Y=(\d+)\s*K=(\d+)/i);
+        if (m) {
+          values = [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])];
+        }
+        if (!values) {
+          m = name.match(/^c(\d+)m(\d+)y(\d+)k(\d+)$/i);
+          if (m)
+            values = [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])];
+        }
+        if (values) {
+          const rgb = convertToCssRGB("CMYK", values);
+          colors[ref] = { space: "CMYK", values, rgb };
+          colors[name] = colors[ref];
+        }
+      }
     }
     return colors;
   }
@@ -403,5 +446,159 @@ export class IDMLParser {
 
     console.log(`Total elements found (including nested): ${elements.length}`);
     return elements;
+  }
+
+  /**
+   * Get pages with their elements grouped per spread/page
+   * Uses Spreads/*.xml and Page @ _Name where available.
+   * @returns {Array<{pageName:number|string, elements:Array}>}
+   */
+  getPages() {
+    const pages = [];
+    const spreadKeys = Object.keys(this.data).filter((k) =>
+      k.startsWith("Spreads\\")
+    );
+    // Build a lookup of master spreads by id
+    const masterMap = {};
+    const masterKeys = Object.keys(this.data).filter((k) =>
+      k.startsWith("MasterSpreads\\")
+    );
+    for (const mkey of masterKeys) {
+      const m = this.data[mkey]?.["idPkg:MasterSpread"]?.MasterSpread;
+      if (m?.["@_Self"]) masterMap[m["@_Self"]] = m;
+    }
+    for (const key of spreadKeys) {
+      const spreadData = this.data[key];
+      const spread = spreadData?.["idPkg:Spread"]?.Spread;
+      if (!spread) continue;
+
+      // Gather elements for this spread (including applied master items)
+      const elements = [];
+
+      // If the page applies a master, bring its items first
+      const pageEntry = Array.isArray(spread.Page)
+        ? spread.Page[0]
+        : spread.Page;
+      const appliedMasterId = pageEntry?.["@_AppliedMaster"];
+      if (
+        appliedMasterId &&
+        appliedMasterId !== "n" &&
+        masterMap[appliedMasterId]
+      ) {
+        const mm = masterMap[appliedMasterId];
+        const mFrames = Array.isArray(mm.TextFrame)
+          ? mm.TextFrame
+          : mm.TextFrame
+          ? [mm.TextFrame]
+          : [];
+        for (const f of mFrames) {
+          elements.push(parseTextFrame(f));
+          this.extractNestedShapes(f, elements);
+        }
+        const mRects = Array.isArray(mm.Rectangle)
+          ? mm.Rectangle
+          : mm.Rectangle
+          ? [mm.Rectangle]
+          : [];
+        for (const r of mRects) {
+          elements.push(parseRectangle(r));
+          this.extractNestedShapes(r, elements);
+        }
+        const mPolys = Array.isArray(mm.Polygon)
+          ? mm.Polygon
+          : mm.Polygon
+          ? [mm.Polygon]
+          : [];
+        for (const p of mPolys) {
+          elements.push(parsePolygon(p));
+          this.extractNestedShapes(p, elements);
+        }
+        const mOvals = Array.isArray(mm.Oval)
+          ? mm.Oval
+          : mm.Oval
+          ? [mm.Oval]
+          : [];
+        for (const o of mOvals) {
+          elements.push(parseOval(o));
+          this.extractNestedShapes(o, elements);
+        }
+        const mGroups = Array.isArray(mm.Group)
+          ? mm.Group
+          : mm.Group
+          ? [mm.Group]
+          : [];
+        for (const g of mGroups) {
+          this.extractNestedShapes(g, elements);
+        }
+      }
+
+      const frames = Array.isArray(spread.TextFrame)
+        ? spread.TextFrame
+        : spread.TextFrame
+        ? [spread.TextFrame]
+        : [];
+      for (const frame of frames) {
+        elements.push(parseTextFrame(frame));
+        this.extractNestedShapes(frame, elements);
+      }
+
+      const rects = Array.isArray(spread.Rectangle)
+        ? spread.Rectangle
+        : spread.Rectangle
+        ? [spread.Rectangle]
+        : [];
+      for (const r of rects) {
+        elements.push(parseRectangle(r));
+        this.extractNestedShapes(r, elements);
+      }
+
+      const polys = Array.isArray(spread.Polygon)
+        ? spread.Polygon
+        : spread.Polygon
+        ? [spread.Polygon]
+        : [];
+      for (const p of polys) {
+        elements.push(parsePolygon(p));
+        this.extractNestedShapes(p, elements);
+      }
+
+      const ovals = Array.isArray(spread.Oval)
+        ? spread.Oval
+        : spread.Oval
+        ? [spread.Oval]
+        : [];
+      for (const o of ovals) {
+        elements.push(parseOval(o));
+        this.extractNestedShapes(o, elements);
+      }
+
+      const groups = Array.isArray(spread.Group)
+        ? spread.Group
+        : spread.Group
+        ? [spread.Group]
+        : [];
+      for (const group of groups) {
+        this.extractNestedShapes(group, elements);
+      }
+
+      // Determine page name from Spread.Page if present
+      const pageName = pageEntry?.["@_Name"] || pages.length + 1;
+      const pageNumber = Number(pageName);
+
+      pages.push({
+        pageName,
+        pageNumber: isNaN(pageNumber) ? null : pageNumber,
+        elements,
+      });
+    }
+    // Sort by numeric page number when available, otherwise preserve discovery order
+    pages.sort((a, b) => {
+      if (a.pageNumber != null && b.pageNumber != null)
+        return a.pageNumber - b.pageNumber;
+      if (a.pageNumber != null) return -1;
+      if (b.pageNumber != null) return 1;
+      return 0;
+    });
+    return pages;
   }
 }

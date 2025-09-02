@@ -115,14 +115,28 @@ export function renderOval(element, colors, stories, offsets) {
 
   // Apply styling to the shape element
   if (element.fillColor) {
-    const fillColor = resolveSwatchRGB(colors, element.fillColor);
+    let fillColor = resolveSwatchRGB(colors, element.fillColor);
+    if (
+      fillColor &&
+      element.fillTint !== undefined &&
+      element.fillTint !== null
+    ) {
+      fillColor = applyTint(fillColor, element.fillTint);
+    }
     shapeElement.setAttribute("fill", fillColor || "none");
   } else {
     shapeElement.setAttribute("fill", "none");
   }
 
   if (element.strokeWeight > 0 && element.strokeColor) {
-    const strokeColor = resolveSwatchRGB(colors, element.strokeColor);
+    let strokeColor = resolveSwatchRGB(colors, element.strokeColor);
+    if (
+      strokeColor &&
+      element.strokeTint !== undefined &&
+      element.strokeTint !== null
+    ) {
+      strokeColor = applyTint(strokeColor, element.strokeTint);
+    }
     shapeElement.setAttribute("stroke", strokeColor || "black");
     shapeElement.setAttribute("stroke-width", element.strokeWeight);
   } else {
@@ -283,14 +297,28 @@ export function renderPolygon(element, colors, stories, offsets) {
 
     // Apply styling to the polygon
     if (element.fillColor) {
-      const fillColor = resolveSwatchRGB(colors, element.fillColor);
+      let fillColor = resolveSwatchRGB(colors, element.fillColor);
+      if (
+        fillColor &&
+        element.fillTint !== undefined &&
+        element.fillTint !== null
+      ) {
+        fillColor = applyTint(fillColor, element.fillTint);
+      }
       polygon.setAttribute("fill", fillColor || "none");
     } else {
       polygon.setAttribute("fill", "none");
     }
 
     if (element.strokeWeight > 0 && element.strokeColor) {
-      const strokeColor = resolveSwatchRGB(colors, element.strokeColor);
+      let strokeColor = resolveSwatchRGB(colors, element.strokeColor);
+      if (
+        strokeColor &&
+        element.strokeTint !== undefined &&
+        element.strokeTint !== null
+      ) {
+        strokeColor = applyTint(strokeColor, element.strokeTint);
+      }
       polygon.setAttribute("stroke", strokeColor || "black");
       polygon.setAttribute("stroke-width", element.strokeWeight);
     } else {
@@ -381,14 +409,28 @@ export function renderPolygon(element, colors, stories, offsets) {
 
     // Apply styling
     if (element.fillColor) {
-      const fillColor = resolveSwatchRGB(colors, element.fillColor);
+      let fillColor = resolveSwatchRGB(colors, element.fillColor);
+      if (
+        fillColor &&
+        element.fillTint !== undefined &&
+        element.fillTint !== null
+      ) {
+        fillColor = applyTint(fillColor, element.fillTint);
+      }
       path.setAttribute("fill", fillColor || "none");
     } else {
       path.setAttribute("fill", "none");
     }
 
     if (element.strokeWeight > 0 && element.strokeColor) {
-      const strokeColor = resolveSwatchRGB(colors, element.strokeColor);
+      let strokeColor = resolveSwatchRGB(colors, element.strokeColor);
+      if (
+        strokeColor &&
+        element.strokeTint !== undefined &&
+        element.strokeTint !== null
+      ) {
+        strokeColor = applyTint(strokeColor, element.strokeTint);
+      }
       path.setAttribute("stroke", strokeColor || "black");
       path.setAttribute("stroke-width", element.strokeWeight);
     } else {
@@ -621,22 +663,28 @@ export function applyElementStyles(
   if (
     element.type !== "polygon" &&
     element.type !== "oval" &&
-    element.fillColor &&
-    colors[element.fillColor]
+    element.fillColor
   ) {
-    domElement.style.backgroundColor = colors[element.fillColor].rgb;
+    let base = resolveSwatchRGB(colors, element.fillColor);
+    if (element.fillTint !== undefined && element.fillTint !== null) {
+      base = applyTint(base, element.fillTint);
+    }
+    if (base) domElement.style.backgroundColor = base;
   }
 
   // Apply border only for non-SVG elements
   if (element.type !== "polygon" && element.type !== "oval") {
-    if (
-      element.strokeWeight > 0 &&
-      element.strokeColor &&
-      colors[element.strokeColor]
-    ) {
-      domElement.style.border = `${element.strokeWeight}px solid ${
-        colors[element.strokeColor].rgb
-      }`;
+    if (element.strokeWeight > 0 && element.strokeColor) {
+      let base = resolveSwatchRGB(colors, element.strokeColor);
+      if (
+        base &&
+        element.strokeTint !== undefined &&
+        element.strokeTint !== null
+      ) {
+        base = applyTint(base, element.strokeTint);
+      }
+      if (base)
+        domElement.style.border = `${element.strokeWeight}px solid ${base}`;
     } else if (element.type === "rectangle") {
       domElement.style.border = "1px dashed red";
     }
@@ -850,4 +898,20 @@ export function cmykToRgbCss(C, M, Y, K) {
   const g = Math.round(255 * (1 - m) * (1 - k));
   const b = Math.round(255 * (1 - y) * (1 - k));
   return `rgb(${r}, ${g}, ${b})`;
+}
+
+// Apply an InDesign-style tint percentage (0-100) to an RGB color string
+function applyTint(rgbString, tintPercent) {
+  if (!rgbString || typeof rgbString !== "string") return rgbString;
+  const m = rgbString.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/i);
+  if (!m) return rgbString;
+  const r = Number(m[1]);
+  const g = Number(m[2]);
+  const b = Number(m[3]);
+  const t = Math.max(0, Math.min(100, Number(tintPercent)));
+  const factor = t / 100; // 100 -> original, 0 -> white
+  const tr = Math.round(255 - (255 - r) * factor);
+  const tg = Math.round(255 - (255 - g) * factor);
+  const tb = Math.round(255 - (255 - b) * factor);
+  return `rgb(${tr}, ${tg}, ${tb})`;
 }

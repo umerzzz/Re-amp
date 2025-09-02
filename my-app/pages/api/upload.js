@@ -51,7 +51,9 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const uploadRoot = path.join(process.cwd(), "uploads");
+  // Create a timestamped folder for this upload batch
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const uploadRoot = path.join(process.cwd(), "uploads", timestamp);
   if (!fs.existsSync(uploadRoot)) {
     fs.mkdirSync(uploadRoot, { recursive: true });
   }
@@ -73,6 +75,13 @@ export default async function handler(req, res) {
     const candidates = files.file || files.files || files.upload || [];
     const fileList = Array.isArray(candidates) ? candidates : [candidates];
 
+    // Create a metadata object to store information about this upload batch
+    const uploadMetadata = {
+      timestamp: new Date().toISOString(),
+      totalFiles: fileList.length,
+      files: [],
+    };
+
     for (const file of fileList) {
       if (!file || !file.originalFilename) continue;
       const originalName = file.originalFilename;
@@ -85,7 +94,14 @@ export default async function handler(req, res) {
         .filter((seg) => seg && seg !== "." && seg !== "..")
         .join("/");
 
-      const destPath = path.resolve(uploadRoot, safeRelative);
+      // Create a folder for this file within the timestamp folder
+      const fileFolderName = safeRelative
+        .replace(/[^a-zA-Z0-9-_]/g, "-")
+        .substring(0, 50);
+      const fileDir = path.join(uploadRoot, fileFolderName);
+      await fs.promises.mkdir(fileDir, { recursive: true });
+
+      const destPath = path.resolve(fileDir, path.basename(safeRelative));
       const uploadsRootAbs = path.resolve(uploadRoot);
       if (!destPath.startsWith(uploadsRootAbs)) {
         // Prevent path traversal outside uploads
@@ -99,12 +115,17 @@ export default async function handler(req, res) {
       await fs.promises.copyFile(tmpPath, destPath);
 
       if (originalName.toLowerCase().endsWith(".idml")) {
-        const extractDir = destPath.replace(/\.idml$/i, "");
+        // Create a directory for the extracted contents with the same name but without .idml extension
+        const baseName = path.basename(destPath, ".idml");
+        const extractDir = path.join(path.dirname(destPath), baseName);
         await fs.promises.mkdir(extractDir, { recursive: true });
+
+        // Extract the IDML file (which is a zip) to the extractDir
         await unzipper.Open.file(destPath).then((d) =>
           d.extract({ path: extractDir, concurrency: 5 })
         );
 
+        // Process all XML files in the extracted directory
         const xmlFiles = [];
         await walkDir(extractDir, extractDir, xmlFiles);
         const xmlJson = parseAllXml(xmlFiles);
@@ -117,23 +138,72 @@ export default async function handler(req, res) {
           "utf8"
         );
 
-        entries.push({
+        const fileInfo = {
           name: originalName,
-          extractedTo: path.relative(uploadRoot, extractDir),
+          extractedTo: path.relative(path.dirname(uploadRoot), extractDir),
           xmlJson,
-          rawDataPath: path.relative(uploadRoot, rawDataFile),
+          rawDataPath: path.relative(path.dirname(uploadRoot), rawDataFile),
+          timestamp: new Date().toISOString(),
+        };
+
+        entries.push(fileInfo);
+        uploadMetadata.files.push({
+          name: originalName,
+          type: "idml",
+          extractedTo: path.relative(path.dirname(uploadRoot), extractDir),
         });
       } else {
-        entries.push({
+        const fileInfo = {
           name: originalName,
-          savedAs: path.relative(uploadRoot, destPath),
+          savedAs: path.relative(path.dirname(uploadRoot), destPath),
+          timestamp: new Date().toISOString(),
+        };
+
+        entries.push(fileInfo);
+        uploadMetadata.files.push({
+          name: originalName,
+          type: path.extname(originalName).substring(1) || "unknown",
+          savedAs: path.relative(path.dirname(uploadRoot), destPath),
         });
       }
     }
 
-    return res.status(200).json({ ok: true, files: entries });
+    // Save metadata file
+    const metadataPath = path.join(uploadRoot, "upload-metadata.json");
+    await fs.promises.writeFile(
+      metadataPath,
+      JSON.stringify(uploadMetadata, null, 2),
+      "utf8"
+    );
+
+    return res.status(200).json({
+      ok: true,
+      files: entries,
+      uploadId: path.basename(uploadRoot),
+      timestamp: uploadMetadata.timestamp,
+    });
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ error: "Upload failed" });
+    console.error("Upload failed:", error);
+
+    // Log error to a file in the upload directory if it was created
+    try {
+      if (fs.existsSync(uploadRoot)) {
+        const errorLogPath = path.join(uploadRoot, "error.log");
+        await fs.promises.writeFile(
+          errorLogPath,
+          `Error occurred at ${new Date().toISOString()}\n${
+            error.stack || error.toString()
+          }`,
+          "utf8"
+        );
+      }
+    } catch (logError) {
+      console.error("Failed to write error log:", logError);
+    }
+
+    return res.status(500).json({
+      error: "Upload failed",
+      message: error.message || "Unknown error occurred during upload",
+    });
   }
 }

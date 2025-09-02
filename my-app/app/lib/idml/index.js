@@ -178,13 +178,25 @@ export class IDMLParser {
    * Recursively extract shapes from a container (like groups, rectangles with nested content)
    * @param {Object} container - The container object to search
    * @param {Array} elements - Array to add found elements to
+   * @param {Object} parentTransform - Accumulated transform from parent containers
    */
-  extractNestedShapes(container, elements) {
+  extractNestedShapes(container, elements, parentTransform = null) {
     if (!container) return;
 
     console.log(
       "Extracting nested shapes from container:",
-      container?.["@_Self"] || "unknown"
+      container?.["@_Self"] || "unknown",
+      "with parent transform:",
+      parentTransform
+    );
+
+    // Get the current container's transform and combine with parent
+    const containerTransform = this.parseTransform(
+      container?.["@_ItemTransform"]
+    );
+    const combinedTransform = this.combineTransforms(
+      parentTransform,
+      containerTransform
     );
 
     // Check for nested groups
@@ -194,7 +206,7 @@ export class IDMLParser {
         : [container.Group];
       console.log(`Found ${groups.length} nested groups`);
       for (const group of groups) {
-        this.extractNestedShapes(group, elements);
+        this.extractNestedShapes(group, elements, combinedTransform);
       }
     }
 
@@ -205,8 +217,13 @@ export class IDMLParser {
         : [container.Rectangle];
       console.log(`Found ${rects.length} nested rectangles`);
       for (const rect of rects) {
-        elements.push(parseRectangle(rect));
-        this.extractNestedShapes(rect, elements); // Recursively check inside rectangles
+        const parsedRect = parseRectangle(rect);
+        // Apply parent transform to the element
+        if (combinedTransform) {
+          parsedRect.parentTransform = combinedTransform;
+        }
+        elements.push(parsedRect);
+        this.extractNestedShapes(rect, elements, combinedTransform); // Recursively check inside rectangles
       }
     }
 
@@ -217,8 +234,13 @@ export class IDMLParser {
         : [container.Polygon];
       console.log(`Found ${polys.length} nested polygons`);
       for (const poly of polys) {
-        elements.push(parsePolygon(poly));
-        this.extractNestedShapes(poly, elements); // Recursively check inside polygons
+        const parsedPoly = parsePolygon(poly);
+        // Apply parent transform to the element
+        if (combinedTransform) {
+          parsedPoly.parentTransform = combinedTransform;
+        }
+        elements.push(parsedPoly);
+        this.extractNestedShapes(poly, elements, combinedTransform); // Recursively check inside polygons
       }
     }
 
@@ -229,8 +251,13 @@ export class IDMLParser {
         : [container.Oval];
       console.log(`Found ${ovals.length} nested ovals`);
       for (const oval of ovals) {
-        elements.push(parseOval(oval));
-        this.extractNestedShapes(oval, elements); // Recursively check inside ovals
+        const parsedOval = parseOval(oval);
+        // Apply parent transform to the element
+        if (combinedTransform) {
+          parsedOval.parentTransform = combinedTransform;
+        }
+        elements.push(parsedOval);
+        this.extractNestedShapes(oval, elements, combinedTransform); // Recursively check inside ovals
       }
     }
 
@@ -241,10 +268,59 @@ export class IDMLParser {
         : [container.TextFrame];
       console.log(`Found ${frames.length} nested text frames`);
       for (const frame of frames) {
-        elements.push(parseTextFrame(frame));
-        this.extractNestedShapes(frame, elements); // Recursively check inside text frames
+        const parsedFrame = parseTextFrame(frame);
+        // Apply parent transform to the element
+        if (combinedTransform) {
+          parsedFrame.parentTransform = combinedTransform;
+        }
+        elements.push(parsedFrame);
+        this.extractNestedShapes(frame, elements, combinedTransform); // Recursively check inside text frames
       }
     }
+  }
+
+  /**
+   * Parse transform string into transform object
+   * @param {string} transformString - Transform string in format "a b c d tx ty"
+   * @returns {Object|null} Transform object or null if no transform
+   */
+  parseTransform(transformString) {
+    if (!transformString) return null;
+    const values = String(transformString).split(" ").map(Number);
+    return {
+      a: values[0] || 1,
+      b: values[1] || 0,
+      c: values[2] || 0,
+      d: values[3] || 1,
+      tx: values[4] || 0,
+      ty: values[5] || 0,
+    };
+  }
+
+  /**
+   * Combine two transform matrices
+   * @param {Object|null} parent - Parent transform matrix
+   * @param {Object|null} child - Child transform matrix
+   * @returns {Object|null} Combined transform matrix
+   */
+  combineTransforms(parent, child) {
+    if (!parent && !child) return null;
+    if (!parent) return child;
+    if (!child) return parent;
+
+    // Matrix multiplication: parent * child
+    // [a c tx]   [a' c' tx']   [aa'+cb'  ac'+cd'  atx'+cty'+tx]
+    // [b d ty] * [b' d' ty'] = [ba'+db'  bc'+dd'  btx'+dty'+ty]
+    // [0 0  1]   [ 0  0  1]   [   0        0           1     ]
+
+    return {
+      a: parent.a * child.a + parent.c * child.b,
+      b: parent.b * child.a + parent.d * child.b,
+      c: parent.a * child.c + parent.c * child.d,
+      d: parent.b * child.c + parent.d * child.d,
+      tx: parent.a * child.tx + parent.c * child.ty + parent.tx,
+      ty: parent.b * child.tx + parent.d * child.ty + parent.ty,
+    };
   }
 
   /**

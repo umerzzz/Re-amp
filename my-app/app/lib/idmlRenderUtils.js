@@ -577,10 +577,41 @@ export function applyElementStyles(
 ) {
   domElement.style.position = "absolute";
   domElement.style.boxSizing = "border-box";
-  const x =
-    (element.bounds?.x || 0) + (element.transform?.tx || 0) + (offsets.ox || 0);
-  const y =
-    (element.bounds?.y || 0) + (element.transform?.ty || 0) + (offsets.oy || 0);
+
+  // Calculate the total transform by combining element transform with parent transform
+  let totalTransform = element.transform || {
+    a: 1,
+    b: 0,
+    c: 0,
+    d: 1,
+    tx: 0,
+    ty: 0,
+  };
+
+  if (element.parentTransform) {
+    // Combine parent transform with element transform
+    const parent = element.parentTransform;
+    const child = totalTransform;
+
+    totalTransform = {
+      a: parent.a * child.a + parent.c * child.b,
+      b: parent.b * child.a + parent.d * child.b,
+      c: parent.a * child.c + parent.c * child.d,
+      d: parent.b * child.c + parent.d * child.d,
+      tx: parent.a * child.tx + parent.c * child.ty + parent.tx,
+      ty: parent.b * child.tx + parent.d * child.ty + parent.ty,
+    };
+
+    console.log("Combined transforms:", {
+      parent: element.parentTransform,
+      child: element.transform,
+      total: totalTransform,
+    });
+  }
+
+  const x = (element.bounds?.x || 0) + totalTransform.tx + (offsets.ox || 0);
+  const y = (element.bounds?.y || 0) + totalTransform.ty + (offsets.oy || 0);
+
   domElement.style.left = `${x}px`;
   domElement.style.top = `${y}px`;
   domElement.style.width = `${element.bounds?.width || 0}px`;
@@ -616,11 +647,14 @@ export function applyElementStyles(
     domElement.style.filter = `drop-shadow(${ds.offsetX}px ${ds.offsetY}px ${ds.blurRadius}px ${ds.color})`;
   }
 
-  if (element.transform) {
-    const t = element.transform;
-    if (t.a !== 1 || t.b !== 0 || t.c !== 0 || t.d !== 1) {
-      domElement.style.transform = `matrix(${t.a}, ${t.b}, ${t.c}, ${t.d}, 0, 0)`;
-    }
+  // Apply the total transform matrix (excluding translation which we handle via left/top)
+  if (
+    totalTransform.a !== 1 ||
+    totalTransform.b !== 0 ||
+    totalTransform.c !== 0 ||
+    totalTransform.d !== 1
+  ) {
+    domElement.style.transform = `matrix(${totalTransform.a}, ${totalTransform.b}, ${totalTransform.c}, ${totalTransform.d}, 0, 0)`;
   }
 
   if (element.visible === false) domElement.style.display = "none";

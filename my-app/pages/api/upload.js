@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import unzipper from "unzipper";
 import { XMLParser } from "fast-xml-parser";
+import { sendRunScriptWithFile } from "../../app/lib/indesignSoap";
 
 async function walkDir(root, dir, out) {
   const entries = await fs.promises.readdir(dir, { withFileTypes: true });
@@ -61,6 +62,8 @@ export default async function handler(req, res) {
   const form = formidable({
     multiples: true,
     keepExtensions: true,
+    allowEmptyFiles: true,
+    minFileSize: 0,
   });
 
   try {
@@ -86,6 +89,10 @@ export default async function handler(req, res) {
       if (!file || !file.originalFilename) continue;
       const originalName = file.originalFilename;
       const tmpPath = file.filepath || file.path;
+      // Skip empty placeholder entries (e.g., directories in folder uploads)
+      if (!tmpPath || file.size === 0) {
+        continue;
+      }
 
       // Normalize potential nested paths from folder uploads
       const normalized = originalName.replace(/\\\\/g, "/");
@@ -151,6 +158,97 @@ export default async function handler(req, res) {
           name: originalName,
           type: "idml",
           extractedTo: path.relative(path.dirname(uploadRoot), extractDir),
+        });
+      } else if (
+        originalName.toLowerCase().endsWith(".indd") ||
+        originalName.toLowerCase().endsWith(".indt")
+      ) {
+        // Send to InDesign Server for packaging/export
+        const idsResponse = await sendRunScriptWithFile({
+          serverHost: "127.0.0.1",
+          serverPort: 1235,
+          filePath: destPath,
+          exportFolderPath: path.dirname(destPath),
+          packageFolderPath: path.join(path.dirname(destPath), "packaged"),
+        });
+        // Try to locate the generated IDML and process it like native IDML uploads
+        const pkgDir = path.join(path.dirname(destPath), "packaged");
+        let generatedIdml = null;
+        if (fs.existsSync(pkgDir)) {
+          const stack = [pkgDir];
+          while (stack.length && !generatedIdml) {
+            const cur = stack.pop();
+            const items = await fs.promises.readdir(cur, {
+              withFileTypes: true,
+            });
+            for (const it of items) {
+              const full = path.join(cur, it.name);
+              if (it.isDirectory()) stack.push(full);
+              else if (it.isFile() && it.name.toLowerCase().endsWith(".idml")) {
+                generatedIdml = full;
+                break;
+              }
+            }
+          }
+        }
+
+        let idmlExtractedTo = null;
+        let idmlRawDataPath = null;
+        let xmlJson = null;
+        if (generatedIdml) {
+          const baseName = path.basename(generatedIdml, ".idml");
+          const extractBase = path.join(
+            path.dirname(generatedIdml),
+            `${baseName}-idml`
+          );
+          let extractDir = extractBase;
+          let suffix = 1;
+          while (
+            fs.existsSync(extractDir) &&
+            !fs.lstatSync(extractDir).isDirectory()
+          ) {
+            extractDir = `${extractBase}-${suffix++}`;
+          }
+          if (!fs.existsSync(extractDir)) {
+            await fs.promises.mkdir(extractDir, { recursive: true });
+          }
+          await unzipper.Open.file(generatedIdml).then((d) =>
+            d.extract({ path: extractDir, concurrency: 5 })
+          );
+          const xmlFiles = [];
+          await walkDir(extractDir, extractDir, xmlFiles);
+          xmlJson = parseAllXml(xmlFiles);
+          const rawDataFile = path.join(extractDir, "raw_data.json");
+          await fs.promises.writeFile(
+            rawDataFile,
+            JSON.stringify(xmlJson, null, 2),
+            "utf8"
+          );
+          idmlExtractedTo = path.relative(path.dirname(uploadRoot), extractDir);
+          idmlRawDataPath = path.relative(
+            path.dirname(uploadRoot),
+            rawDataFile
+          );
+        }
+
+        const fileInfo = {
+          name: originalName,
+          savedAs: path.relative(path.dirname(uploadRoot), destPath),
+          ids: { status: idsResponse.status, ok: idsResponse.ok },
+          idsRaw: idsResponse.body,
+          idmlExtractedTo,
+          idmlRawDataPath,
+          xmlJson,
+          timestamp: new Date().toISOString(),
+        };
+
+        entries.push(fileInfo);
+        uploadMetadata.files.push({
+          name: originalName,
+          type: path.extname(originalName).substring(1) || "unknown",
+          savedAs: path.relative(path.dirname(uploadRoot), destPath),
+          ids: { status: idsResponse.status, ok: idsResponse.ok },
+          idmlExtractedTo,
         });
       } else {
         const fileInfo = {

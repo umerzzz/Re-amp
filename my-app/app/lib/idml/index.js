@@ -4,6 +4,12 @@ import { parseOval } from "./ovalParser";
 import { parseTextFrame } from "./textFrameParser";
 import { parseStoryContent } from "./storyParser";
 import { convertToCssRGB } from "./utils";
+import {
+  resolveAllStyles,
+  resolveCharacterStyle,
+  resolveParagraphStyle,
+  enrichContentWithStyles,
+} from "./styleResolver";
 
 /**
  * Main IDML Parser class that coordinates parsing of IDML JSON data
@@ -611,8 +617,52 @@ export class IDMLParser {
         return a.pageNumber - b.pageNumber;
       if (a.pageNumber != null) return -1;
       if (b.pageNumber != null) return 1;
-      return 0;
     });
     return pages;
+  }
+
+  /**
+   * Get all character styles defined in the document
+   * @returns {Object} Map of character style references to their definitions
+   */
+  getCharacterStyles() {
+    const allStyles = resolveAllStyles(this.data);
+    return allStyles.characterStyles;
+  }
+
+  /**
+   * Get all paragraph styles defined in the document
+   * @returns {Object} Map of paragraph style references to their definitions
+   */
+  getParagraphStyles() {
+    const allStyles = resolveAllStyles(this.data);
+    return allStyles.paragraphStyles;
+  }
+
+  /**
+   * Resolve a character style reference to its definition
+   * @param {string} styleRef - The character style reference (e.g., "CharacterStyle/title")
+   * @returns {Object|null} The resolved style definition or null if not found
+   */
+  resolveCharacterStyle(styleRef) {
+    return resolveCharacterStyle(styleRef, this.data);
+  }
+
+  /**
+   * Resolve a paragraph style reference to its definition
+   * @param {string} styleRef - The paragraph style reference (e.g., "ParagraphStyle/Title")
+   * @returns {Object|null} The resolved style definition or null if not found
+   */
+  resolveParagraphStyle(styleRef) {
+    return resolveParagraphStyle(styleRef, this.data);
+  }
+
+  /**
+   * Enhance IDML content with resolved style information
+   * @param {Object} contentData - A portion of IDML data containing content elements (optional)
+   * @returns {Object} The enhanced data with resolved styles
+   */
+  enrichContentWithStyles(contentData = null) {
+    return enrichContentWithStyles(contentData || this.data);
   }
 }

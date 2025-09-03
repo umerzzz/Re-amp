@@ -1,15 +1,15 @@
 // Utility functions for rendering IDML elements in React
 
-export function createElement(element, colors, stories, offsets) {
+export function createElement(element, colors, stories, offsets, parser) {
   switch (element.type) {
     case "rectangle":
       return renderBox(element, colors, offsets);
     case "textframe":
-      return renderTextFrame(element, colors, stories, offsets);
+      return renderTextFrame(element, colors, stories, offsets, parser);
     case "polygon":
       return renderPolygon(element, colors, stories, offsets);
     case "oval":
-      return renderOval(element, colors, stories, offsets); // Use specialized renderer for ovals
+      return renderOval(element, colors, stories, offsets, parser); // Use specialized renderer for ovals
     default:
       return null;
   }
@@ -491,7 +491,7 @@ export function renderPolygon(element, colors, stories, offsets) {
   return containerDiv;
 }
 
-export function renderTextFrame(element, colors, stories, offsets) {
+export function renderTextFrame(element, colors, stories, offsets, parser) {
   const div = document.createElement("div");
   div.style.zIndex = "10";
   const story = stories?.[element.storyId];
@@ -550,15 +550,159 @@ export function renderTextFrame(element, colors, stories, offsets) {
     const paras = story.paragraphs || [];
     for (const p of paras) {
       const pEl = document.createElement("div");
+
+      // Get paragraph style if we have a reference and a parser
+      let paraStyle = null;
+      if (parser && p.appliedParagraphStyle) {
+        paraStyle = parser.resolveParagraphStyle(p.appliedParagraphStyle);
+
+        // Apply paragraph style properties if found
+        if (paraStyle) {
+          // Debug log for style resolution
+          console.debug("[IDML:paraStyle]", {
+            ref: p.appliedParagraphStyle,
+            resolved: paraStyle,
+          });
+
+          // GENERIC STYLE PROCESSING:
+
+          // Process all Properties
+          if (paraStyle.Properties) {
+            Object.entries(paraStyle.Properties).forEach(([key, value]) => {
+              if (value && value["#text"] !== undefined) {
+                const propValue = value["#text"];
+
+                // Font family
+                if (key === "AppliedFont") {
+                  pEl.style.fontFamily = propValue;
+                }
+
+                // Leading (line height)
+                else if (key === "Leading" && propValue !== "Auto") {
+                  pEl.style.lineHeight = `${propValue}pt`;
+                }
+
+                // Store all properties as data attributes for debugging and custom processing
+                pEl.dataset[`idmlProp${key}`] = propValue;
+              }
+            });
+          }
+
+          // Process all direct attributes (starting with @_)
+          Object.entries(paraStyle).forEach(([key, value]) => {
+            if (key.startsWith("@_") && value !== undefined && value !== null) {
+              const cssKey = key.substring(2); // Remove the @_ prefix
+
+              // Handle special cases for CSS mapping
+
+              // Font size
+              if (cssKey === "PointSize") {
+                pEl.style.fontSize = `${value}pt`;
+              }
+
+              // Font style (bold/italic)
+              else if (cssKey === "FontStyle") {
+                const fontStyle = String(value).toLowerCase();
+                if (fontStyle.includes("bold")) {
+                  pEl.style.fontWeight = "bold";
+                }
+                if (fontStyle.includes("italic")) {
+                  pEl.style.fontStyle = "italic";
+                }
+              }
+
+              // Text color
+              else if (cssKey === "FillColor" && colors) {
+                const fillColor = resolveSwatchRGB(colors, value);
+                if (fillColor) {
+                  pEl.style.color = fillColor;
+                }
+              }
+
+              // Fill opacity/tint
+              else if (cssKey === "FillTint" && value !== -1) {
+                // Store for later use with fillColor
+                pEl.dataset.fillTint = value;
+              }
+
+              // Text alignment
+              else if (cssKey === "Justification") {
+                const styleJust = String(value);
+                if (styleJust.includes("Center")) {
+                  pEl.style.textAlign = "center";
+                } else if (styleJust.includes("Right")) {
+                  pEl.style.textAlign = "right";
+                } else if (styleJust.includes("Left")) {
+                  pEl.style.textAlign = "left";
+                } else if (styleJust.includes("Justify")) {
+                  pEl.style.textAlign = "justify";
+                }
+              }
+
+              // Margins
+              else if (cssKey === "SpaceBefore") {
+                pEl.style.marginTop = `${value}pt`;
+              } else if (cssKey === "SpaceAfter") {
+                pEl.style.marginBottom = `${value}pt`;
+              } else if (cssKey === "LeftIndent") {
+                pEl.style.paddingLeft = `${value}pt`;
+              } else if (cssKey === "RightIndent") {
+                pEl.style.paddingRight = `${value}pt`;
+              } else if (cssKey === "FirstLineIndent") {
+                pEl.style.textIndent = `${value}pt`;
+              }
+
+              // Leading (line height) - use if not already set from Properties
+              else if (cssKey === "Leading" && !pEl.style.lineHeight) {
+                pEl.style.lineHeight = `${value}pt`;
+              }
+
+              // Store all style attributes as data attributes
+              pEl.dataset[`idml${cssKey}`] = value;
+            }
+          });
+
+          // Apply fill color with tint if both are present
+          if (
+            pEl.style.color &&
+            pEl.dataset.fillTint &&
+            pEl.dataset.fillTint !== "-1"
+          ) {
+            const tint = parseFloat(pEl.dataset.fillTint);
+            if (!isNaN(tint)) {
+              // Parse current color
+              let color = pEl.style.color;
+              // Apply tint/opacity to the color
+              if (color.startsWith("rgb")) {
+                // Convert tint to opacity (0-100 to 0-1)
+                const opacity = tint / 100;
+                // Apply as opacity in rgba
+                const rgbValues = color.match(/\d+/g);
+                if (rgbValues && rgbValues.length >= 3) {
+                  pEl.style.color = `rgba(${rgbValues[0]}, ${rgbValues[1]}, ${rgbValues[2]}, ${opacity})`;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Apply inline paragraph properties (these override the style properties)
       const just = String(p.justification || "");
-      if (just === "CenterAlign" || just === "CenterJustified")
-        pEl.style.textAlign = "center";
-      else if (just === "RightAlign" || just === "RightJustified")
-        pEl.style.textAlign = "right";
-      else if (just === "LeftAlign" || just === "LeftJustified" || just === "")
-        pEl.style.textAlign = "left";
-      else if (just === "JustifyAll" || just === "JustifyAlign")
-        pEl.style.textAlign = "justify";
+      if (just) {
+        if (just === "CenterAlign" || just === "CenterJustified")
+          pEl.style.textAlign = "center";
+        else if (just === "RightAlign" || just === "RightJustified")
+          pEl.style.textAlign = "right";
+        else if (
+          just === "LeftAlign" ||
+          just === "LeftJustified" ||
+          just === ""
+        )
+          pEl.style.textAlign = "left";
+        else if (just === "JustifyAll" || just === "JustifyAlign")
+          pEl.style.textAlign = "justify";
+      }
 
       if (isFinite(p.leftIndent)) pEl.style.paddingLeft = `${p.leftIndent}pt`;
       if (isFinite(p.rightIndent))
@@ -573,6 +717,111 @@ export function renderTextFrame(element, colors, stories, offsets) {
       for (const s of p.spans || []) {
         const span = document.createElement("span");
         span.textContent = s.text || "";
+
+        // Apply character style if available
+        let charStyle = null;
+        if (parser && s.appliedCharacterStyle) {
+          charStyle = parser.resolveCharacterStyle(s.appliedCharacterStyle);
+
+          // Apply character style properties if found
+          if (charStyle) {
+            // Debug log for character style resolution
+            console.debug("[IDML:charStyle]", {
+              ref: s.appliedCharacterStyle,
+              resolved: charStyle,
+            });
+
+            // Process all Properties from character style
+            if (charStyle.Properties) {
+              Object.entries(charStyle.Properties).forEach(([key, value]) => {
+                if (value && value["#text"] !== undefined) {
+                  const propValue = value["#text"];
+
+                  // Font family
+                  if (key === "AppliedFont") {
+                    span.style.fontFamily = propValue;
+                  }
+
+                  // Store all properties as data attributes
+                  span.dataset[`idmlProp${key}`] = propValue;
+                }
+              });
+            }
+
+            // Process all direct attributes from character style
+            Object.entries(charStyle).forEach(([key, value]) => {
+              if (
+                key.startsWith("@_") &&
+                value !== undefined &&
+                value !== null
+              ) {
+                const cssKey = key.substring(2); // Remove the @_ prefix
+
+                // Font size
+                if (cssKey === "PointSize") {
+                  span.style.fontSize = `${value}pt`;
+                }
+
+                // Font style
+                else if (cssKey === "FontStyle") {
+                  const fontStyle = String(value).toLowerCase();
+                  if (fontStyle.includes("bold")) {
+                    span.style.fontWeight = "bold";
+                  }
+                  if (fontStyle.includes("italic")) {
+                    span.style.fontStyle = "italic";
+                  }
+                }
+
+                // Text color
+                else if (cssKey === "FillColor" && colors) {
+                  const fillColor = resolveSwatchRGB(colors, value);
+                  if (fillColor) {
+                    span.style.color = fillColor;
+                  }
+                }
+
+                // Fill opacity/tint
+                else if (cssKey === "FillTint" && value !== -1) {
+                  span.dataset.fillTint = value;
+                }
+
+                // Other properties
+                else if (cssKey === "Tracking") {
+                  span.style.letterSpacing = `${value / 1000}em`;
+                }
+
+                // Store all style attributes as data attributes
+                span.dataset[`idml${cssKey}`] = value;
+              }
+            });
+
+            // Apply fill color with tint if both are present
+            if (
+              span.style.color &&
+              span.dataset.fillTint &&
+              span.dataset.fillTint !== "-1"
+            ) {
+              const tint = parseFloat(span.dataset.fillTint);
+              if (!isNaN(tint)) {
+                // Parse current color
+                let color = span.style.color;
+                // Apply tint/opacity to the color
+                if (color.startsWith("rgb")) {
+                  // Convert tint to opacity (0-100 to 0-1)
+                  const opacity = tint / 100;
+                  // Apply as opacity in rgba
+                  const rgbValues = color.match(/\d+/g);
+                  if (rgbValues && rgbValues.length >= 3) {
+                    span.style.color = `rgba(${rgbValues[0]}, ${rgbValues[1]}, ${rgbValues[2]}, ${opacity})`;
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        // Apply inline span properties (these override the style properties)
         if (s.font) span.style.fontFamily = s.font;
         // Prefer explicit point size; default to treating fontSize as points
         const pointSize =

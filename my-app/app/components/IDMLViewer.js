@@ -11,7 +11,15 @@ export default function IDMLViewer({ idmlJson }) {
   const containerRef = useRef(null);
   const [currentPage, setCurrentPage] = useState(0);
 
-  const { parser, docInfo, pages, colors, stories } = useMemo(() => {
+  const {
+    parser,
+    docInfo,
+    pages,
+    colors,
+    stories,
+    characterStyles,
+    paragraphStyles,
+  } = useMemo(() => {
     console.log(
       "Creating parser with JSON data size:",
       idmlJson ? Object.keys(idmlJson).length : 0,
@@ -28,10 +36,31 @@ export default function IDMLViewer({ idmlJson }) {
     const colors = parser.getColors();
     console.log("Colors retrieved:", Object.keys(colors).length);
 
+    // Get styles
+    const characterStyles = parser.getCharacterStyles();
+    console.log(
+      "Character styles retrieved:",
+      Object.keys(characterStyles).length
+    );
+
+    const paragraphStyles = parser.getParagraphStyles();
+    console.log(
+      "Paragraph styles retrieved:",
+      Object.keys(paragraphStyles).length
+    );
+
     const stories = parser.getStories();
     console.log("Stories retrieved:", Object.keys(stories).length);
 
-    return { parser, docInfo, colors, stories, pages };
+    return {
+      parser,
+      docInfo,
+      colors,
+      stories,
+      pages,
+      characterStyles,
+      paragraphStyles,
+    };
   }, [idmlJson]);
 
   useEffect(() => {
@@ -71,18 +100,71 @@ export default function IDMLViewer({ idmlJson }) {
       );
       const offsets = computeOffsets(page.elements);
       for (const el of page.elements) {
-        const dom = createElement(el, colors, stories, offsets);
+        const dom = createElement(el, colors, stories, offsets, parser);
         if (dom) pageWrap.appendChild(dom);
       }
       // ensure border overlay sits on top
       pageWrap.appendChild(borderOverlay);
       container.appendChild(pageWrap);
     }
-  }, [docInfo, pages, colors, stories, currentPage]);
+  }, [docInfo, pages, colors, stories, currentPage, parser]);
 
   return (
     <div>
       <div ref={containerRef} />
+
+      {/* Style Information Section */}
+      <div style={{ marginTop: "20px" }}>
+        <h3>Document Style Information</h3>
+
+        <details>
+          <summary>
+            Character Styles ({Object.keys(characterStyles || {}).length})
+          </summary>
+          <ul style={{ maxHeight: "200px", overflow: "auto" }}>
+            {Object.keys(characterStyles || {}).map((styleRef) => {
+              const style = characterStyles[styleRef];
+              return (
+                <li key={styleRef}>
+                  <strong>{style["@_Name"]}</strong>
+                  {style["@_PointSize"] && (
+                    <span> - Size: {style["@_PointSize"]}</span>
+                  )}
+                  {style["@_FontStyle"] && (
+                    <span> - Style: {style["@_FontStyle"]}</span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </details>
+
+        <details>
+          <summary>
+            Paragraph Styles ({Object.keys(paragraphStyles || {}).length})
+          </summary>
+          <ul style={{ maxHeight: "200px", overflow: "auto" }}>
+            {Object.keys(paragraphStyles || {}).map((styleRef) => {
+              const style = paragraphStyles[styleRef];
+              return (
+                <li key={styleRef}>
+                  <strong>{style["@_Name"]}</strong>
+                  {style["@_Justification"] && (
+                    <span> - Alignment: {style["@_Justification"]}</span>
+                  )}
+                  {style["@_PointSize"] && (
+                    <span> - Size: {style["@_PointSize"]}</span>
+                  )}
+                  {style["@_FontStyle"] && (
+                    <span> - Style: {style["@_FontStyle"]}</span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </details>
+      </div>
+
       {pages?.length > 1 && (
         <div
           style={{

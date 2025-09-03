@@ -19,6 +19,8 @@ export function parseStoryContent(storyData) {
     const spaceBefore = parseFloat(pr?.["@_SpaceBefore"]) || 0;
     const spaceAfter = parseFloat(pr?.["@_SpaceAfter"]) || 0;
     const paraLeading = parseFloat(pr?.["@_Leading"]) || null;
+    // Extract the applied paragraph style reference
+    const appliedParaStyle = pr?.["@_AppliedParagraphStyle"] || null;
     const charRanges = pr?.CharacterStyleRange;
     const charArray = Array.isArray(charRanges)
       ? charRanges
@@ -30,6 +32,9 @@ export function parseStoryContent(storyData) {
     for (const cr of charArray) {
       const contentNode = cr?.Content;
       const brNode = cr?.Br;
+      // Extract the applied character style reference
+      const appliedCharStyle = cr?.["@_AppliedCharacterStyle"] || null;
+
       let text = "";
       if (Array.isArray(contentNode)) {
         const maxLen = Math.max(
@@ -66,6 +71,7 @@ export function parseStoryContent(storyData) {
         position: cr?.["@_Position"],
         underline: cr?.["@_Underline"],
         strikeThru: cr?.["@_StrikeThru"],
+        appliedCharacterStyle: appliedCharStyle, // Add character style reference
         baselineShift:
           cr?.["@_BaselineShift"] !== undefined
             ? Number(cr?.["@_BaselineShift"])
@@ -93,6 +99,7 @@ export function parseStoryContent(storyData) {
       spaceBefore,
       spaceAfter,
       leading: paraLeading,
+      appliedParagraphStyle: appliedParaStyle, // Include the paragraph style reference
     });
   }
 

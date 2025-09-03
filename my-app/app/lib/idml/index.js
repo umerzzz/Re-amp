@@ -19,14 +19,39 @@ export class IDMLParser {
   }
 
   /**
+   * Resolve an idPkg @ _src pointer to the loaded JSON entry.
+   * Tries as-is, backslashes, and filename-only keys.
+   * @param {string} src
+   * @param {string} topKey e.g. "idPkg:Preferences"
+   * @returns {any|null}
+   */
+  resolveSrc(src, topKey) {
+    if (!src) return null;
+    let key = src;
+    let node = this.data[key]?.[topKey];
+    if (node) return node;
+    key = src.replace(/\//g, "\\");
+    node = this.data[key]?.[topKey];
+    if (node) return node;
+    key = src.split("/").pop();
+    node = this.data[key]?.[topKey];
+    if (node) return node;
+    return null;
+  }
+
+  /**
    * Get basic document information
    * @returns {Object} Document dimensions and bleed settings
    */
   getDocumentInfo() {
-    const docPrefs = this.document?.DocumentPreference;
+    const prefSrc = this.document?.["idPkg:Preferences"]?.["@_src"];
+    const prefRoot = this.resolveSrc(prefSrc, "idPkg:Preferences");
+    const docPrefs =
+      prefRoot?.DocumentPreference || this.document?.DocumentPreference || {};
+
     return {
-      width: parseFloat(docPrefs?.["@_PageWidth"]) || 800,
-      height: parseFloat(docPrefs?.["@_PageHeight"]) || 600,
+      width: parseFloat(docPrefs?.["@_PageWidth"]),
+      height: parseFloat(docPrefs?.["@_PageHeight"]),
       bleed: {
         top: parseFloat(docPrefs?.["@_DocumentBleedTopOffset"]) || 0,
         bottom: parseFloat(docPrefs?.["@_DocumentBleedBottomOffset"]) || 0,
@@ -45,7 +70,7 @@ export class IDMLParser {
     const colors = {};
     // designmap points to Resources/Graphic.xml
     const graphicRel = this.document?.["idPkg:Graphic"]?.["@_src"]; // e.g., Resources/Graphic.xml
-    console.log("Graphic rel path:", graphicRel);
+    // shape debug log removed
 
     // Try both forward slash and backslash versions of the path
     let key = graphicRel;
@@ -54,18 +79,18 @@ export class IDMLParser {
     // If not found, try with backslashes
     if (!colorData && key) {
       key = graphicRel?.replace(/\//g, "\\");
-      console.log("Trying backslash key for graphic data:", key);
+      // shape debug log removed
       colorData = key && this.data[key]?.["idPkg:Graphic"]?.Color;
     }
 
     // If still not found, try just the filename
     if (!colorData && graphicRel) {
       key = graphicRel.split("/").pop();
-      console.log("Trying filename only key for graphic data:", key);
+      // shape debug log removed
       colorData = key && this.data[key]?.["idPkg:Graphic"]?.Color;
     }
 
-    console.log("Color data found:", !!colorData);
+    // shape debug log removed
     // Gather base Color swatches
     const swatches = Array.isArray(colorData)
       ? colorData
@@ -194,10 +219,10 @@ export class IDMLParser {
         (key.startsWith("Stories\\") || key.startsWith("Stories/")) &&
         key.endsWith(".xml")
       ) {
-        console.log("Processing story file:", key);
+        // shape debug log removed
         const storyData = this.data[key]?.["idPkg:Story"]?.Story;
         if (!storyData) {
-          console.log("No story data found in", key);
+          // shape debug log removed
           continue;
         }
 
@@ -209,7 +234,7 @@ export class IDMLParser {
         const storyId = idFromSelf || idFromName;
 
         if (storyId) {
-          console.log("Adding story with ID:", storyId);
+          // shape debug log removed
           stories[storyId] = parseStoryContent(storyData);
         }
       }
@@ -226,12 +251,7 @@ export class IDMLParser {
   extractNestedShapes(container, elements, parentTransform = null) {
     if (!container) return;
 
-    console.log(
-      "Extracting nested shapes from container:",
-      container?.["@_Self"] || "unknown",
-      "with parent transform:",
-      parentTransform
-    );
+    // shape debug log removed
 
     // Get the current container's transform and combine with parent
     const containerTransform = this.parseTransform(
@@ -247,7 +267,7 @@ export class IDMLParser {
       const groups = Array.isArray(container.Group)
         ? container.Group
         : [container.Group];
-      console.log(`Found ${groups.length} nested groups`);
+      // shape debug log removed
       for (const group of groups) {
         this.extractNestedShapes(group, elements, combinedTransform);
       }
@@ -258,7 +278,7 @@ export class IDMLParser {
       const rects = Array.isArray(container.Rectangle)
         ? container.Rectangle
         : [container.Rectangle];
-      console.log(`Found ${rects.length} nested rectangles`);
+      // shape debug log removed
       for (const rect of rects) {
         const parsedRect = parseRectangle(rect);
         // Apply parent transform to the element
@@ -275,7 +295,7 @@ export class IDMLParser {
       const polys = Array.isArray(container.Polygon)
         ? container.Polygon
         : [container.Polygon];
-      console.log(`Found ${polys.length} nested polygons`);
+      // shape debug log removed
       for (const poly of polys) {
         const parsedPoly = parsePolygon(poly);
         // Apply parent transform to the element
@@ -292,7 +312,7 @@ export class IDMLParser {
       const ovals = Array.isArray(container.Oval)
         ? container.Oval
         : [container.Oval];
-      console.log(`Found ${ovals.length} nested ovals`);
+      // shape debug log removed
       for (const oval of ovals) {
         const parsedOval = parseOval(oval);
         // Apply parent transform to the element
@@ -309,7 +329,7 @@ export class IDMLParser {
       const frames = Array.isArray(container.TextFrame)
         ? container.TextFrame
         : [container.TextFrame];
-      console.log(`Found ${frames.length} nested text frames`);
+      // shape debug log removed
       for (const frame of frames) {
         const parsedFrame = parseTextFrame(frame);
         // Apply parent transform to the element
@@ -371,22 +391,16 @@ export class IDMLParser {
    * @returns {Array} All parsed elements from the document
    */
   getSpreadElements() {
-    console.log(
-      "getSpreadElements called, data keys:",
-      Object.keys(this.data).length
-    );
+    // shape debug log removed
     const elements = [];
     // Try to discover spreads by scanning data keys
     const spreadKeys = Object.keys(this.data).filter((k) =>
       k.startsWith("Spreads\\")
     );
-    console.log("Found spread keys:", spreadKeys.length, spreadKeys);
+    // shape debug log removed
     for (const key of spreadKeys) {
-      console.log("Processing spread key:", key);
       const spreadData = this.data[key];
-      console.log("Spread data exists:", !!spreadData);
       const spread = spreadData?.["idPkg:Spread"]?.Spread;
-      console.log("Spread object exists:", !!spread);
       if (!spread) continue;
 
       // TextFrames (top-level)
@@ -444,7 +458,7 @@ export class IDMLParser {
       }
     }
 
-    console.log(`Total elements found (including nested): ${elements.length}`);
+    // shape debug log removed
     return elements;
   }
 

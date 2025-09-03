@@ -29,28 +29,27 @@ export function parseTransform(transformString) {
 export function parseGeometry(pathGeometry) {
   // Check if pathGeometry exists and has the right structure
   if (!pathGeometry) {
-    console.log("No pathGeometry provided");
     return null;
   }
 
   // Log the geometry type for debugging
   const geometryType = pathGeometry?.GeometryPathType || null;
-  console.log("GeometryPathType:", geometryType ? "exists" : "not found");
+  // shape debug log removed
 
   // Log the full pathGeometry structure for debugging
   if (typeof window !== "undefined" && window.DEBUG_IDML_SHAPES) {
-    console.log("Full pathGeometry:", JSON.stringify(pathGeometry, null, 2));
+    // shape debug log removed
   }
 
   // Get the path points
   const pts = pathGeometry?.GeometryPathType?.PathPointArray?.PathPointType;
   if (!pts) {
-    console.log("No PathPointType found in geometry");
+    // shape debug log removed
 
     // Check if we have GeometryBounds as fallback
     const geomBounds = pathGeometry?.GeometryBounds;
     if (geomBounds) {
-      console.log("Found GeometryBounds as fallback:", geomBounds);
+      // shape debug log removed
       const bounds_str = String(geomBounds || "0 0 100 70");
       const [y1, x1, y2, x2] = bounds_str.split(" ").map(Number);
       if (isFinite(x2) && isFinite(x1) && isFinite(y2) && isFinite(y1)) {
@@ -69,7 +68,7 @@ export function parseGeometry(pathGeometry) {
 
   // Convert to array if it's a single point
   const array = Array.isArray(pts) ? pts : [pts];
-  console.log("Points count:", array.length);
+  // shape debug log removed
 
   let minX = Infinity,
     minY = Infinity,

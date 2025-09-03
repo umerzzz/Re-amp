@@ -11,7 +11,6 @@ export function createElement(element, colors, stories, offsets) {
     case "oval":
       return renderOval(element, colors, stories, offsets); // Use specialized renderer for ovals
     default:
-      console.log("Unknown element type:", element.type);
       return null;
   }
 }
@@ -38,17 +37,12 @@ export function renderOval(element, colors, stories, offsets) {
     }
   }
 
-  // Log oval rendering info
-  console.log(
-    `Rendering oval: ${width}×${height}, isDefault: ${
-      element.isDefaultOval || false
-    }`
-  );
+  // shape debug log removed
 
   // Create SVG element
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("width", width);
-  svg.setAttribute("height", height);
+  svg.setAttribute("width", `${width}pt`);
+  svg.setAttribute("height", `${height}pt`);
   svg.style.position = "absolute";
   svg.style.overflow = "visible";
 
@@ -60,7 +54,6 @@ export function renderOval(element, colors, stories, offsets) {
   );
 
   // For ovals, use path data to create accurate shape based on Bézier curves
-  console.log("Creating oval with path data from Bézier curves");
   const shapeElement = document.createElementNS(
     "http://www.w3.org/2000/svg",
     "path"
@@ -168,8 +161,8 @@ export function renderOval(element, colors, stories, offsets) {
   // For ovals, override the width/height constraints to allow natural ellipse shape
   containerDiv.style.width = "auto";
   containerDiv.style.height = "auto";
-  containerDiv.style.minWidth = `${width}px`;
-  containerDiv.style.minHeight = `${height}px`;
+  containerDiv.style.minWidth = `${width}pt`;
+  containerDiv.style.minHeight = `${height}pt`;
 
   return containerDiv;
 }
@@ -187,18 +180,10 @@ export function renderPolygon(element, colors, stories, offsets) {
   containerDiv.style.position = "absolute";
   containerDiv.style.zIndex = "2";
 
-  // Add shape type for debugging
+  // Add shape type attribute
   containerDiv.setAttribute("data-shape-type", element.type || "unknown");
 
-  // Log what we're rendering
-  console.log(
-    `Rendering ${element.type || "unknown"} shape:`,
-    element.name,
-    `bounds:`,
-    element.bounds,
-    `points:`,
-    element.bounds?.points?.length || 0
-  );
+  // shape debug log removed
 
   // Extract points data from the polygon
   if (
@@ -206,11 +191,8 @@ export function renderPolygon(element, colors, stories, offsets) {
     !element.bounds.points ||
     element.bounds.points.length === 0
   ) {
-    console.log("Missing points data for:", element.type, element.name);
-
     // If this is an oval type, render as ellipse instead of rectangle
     if (element.type === "oval") {
-      console.log("Rendering oval without points as ellipse");
       return renderOval(element, colors, stories, offsets);
     }
 
@@ -219,7 +201,6 @@ export function renderPolygon(element, colors, stories, offsets) {
       element.bounds &&
       (element.bounds.width > 0 || element.bounds.height > 0)
     ) {
-      console.log("Creating basic shape with available bounds");
       const basicDiv = renderBox(element, colors, offsets);
       basicDiv.setAttribute("data-fallback", "bounds-only");
       basicDiv.setAttribute("data-original-type", element.type || "unknown");
@@ -227,7 +208,6 @@ export function renderPolygon(element, colors, stories, offsets) {
     }
 
     // For other shapes, fallback to rectangle
-    console.log("Fallback to rectangle for:", element.type);
     const fallbackBox = renderBox(element, colors, offsets);
     fallbackBox.setAttribute("data-fallback", "true");
     fallbackBox.setAttribute("data-original-type", element.type || "unknown");
@@ -235,25 +215,40 @@ export function renderPolygon(element, colors, stories, offsets) {
   }
 
   const points = element.bounds.points;
-  const width = Math.max(element.bounds.width, 1);
-  const height = Math.max(element.bounds.height, 1);
+
+  // Compute point-space bounding box relative to element bounds
+  let minX = Infinity,
+    minY = Infinity,
+    maxX = -Infinity,
+    maxY = -Infinity;
+  for (const pt of points) {
+    const px = pt.anchor[0] - element.bounds.x;
+    const py = pt.anchor[1] - element.bounds.y;
+    if (px < minX) minX = px;
+    if (py < minY) minY = py;
+    if (px > maxX) maxX = px;
+    if (py > maxY) maxY = py;
+  }
+  if (!Number.isFinite(minX)) minX = 0;
+  if (!Number.isFinite(minY)) minY = 0;
+  if (!Number.isFinite(maxX)) maxX = element.bounds.width || 0;
+  if (!Number.isFinite(maxY)) maxY = element.bounds.height || 0;
+
+  const width = Math.max(1, maxX - minX);
+  const height = Math.max(1, maxY - minY);
 
   // Add a debug class to help identify the shape type
   containerDiv.className = `idml-polygon shape-${points.length}-points`;
 
-  // Create SVG element with the same dimensions as the polygon bounds
+  // Create SVG element sized to the polygon point bounding box
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("width", width);
-  svg.setAttribute("height", height);
+  svg.setAttribute("width", `${width}pt`);
+  svg.setAttribute("height", `${height}pt`);
   svg.style.position = "absolute";
   svg.style.overflow = "visible"; // Allow paths to extend beyond SVG bounds if needed
 
-  // Define a viewBox that ensures the entire shape is visible
-  const padding = 10; // Add some padding around the shape
-  svg.setAttribute(
-    "viewBox",
-    `${-padding} ${-padding} ${width + padding * 2} ${height + padding * 2}`
-  );
+  // Define a tight viewBox around the normalized shape (no padding)
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
 
   // Create the path element
   const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
@@ -283,8 +278,8 @@ export function renderPolygon(element, colors, stories, offsets) {
     // For simple polygons, use the simpler polygon notation
     const polygonPoints = points
       .map((point) => {
-        const x = point.anchor[0] - element.bounds.x;
-        const y = point.anchor[1] - element.bounds.y;
+        const x = point.anchor[0] - element.bounds.x - minX;
+        const y = point.anchor[1] - element.bounds.y - minY;
         return `${x},${y}`;
       })
       .join(" ");
@@ -335,8 +330,8 @@ export function renderPolygon(element, colors, stories, offsets) {
       const rightControl = point.rightDirection;
 
       // Adjust coordinates relative to the bounds origin
-      const x = anchor[0] - element.bounds.x;
-      const y = anchor[1] - element.bounds.y;
+      const x = anchor[0] - element.bounds.x - minX;
+      const y = anchor[1] - element.bounds.y - minY;
 
       if (i === 0) {
         // Move to first point
@@ -344,11 +339,11 @@ export function renderPolygon(element, colors, stories, offsets) {
       } else {
         const prevPoint = points[i - 1];
         const prevRightControl = prevPoint.rightDirection;
-        const prevRightX = prevRightControl[0] - element.bounds.x;
-        const prevRightY = prevRightControl[1] - element.bounds.y;
+        const prevRightX = prevRightControl[0] - element.bounds.x - minX;
+        const prevRightY = prevRightControl[1] - element.bounds.y - minY;
 
-        const leftControlX = leftControl[0] - element.bounds.x;
-        const leftControlY = leftControl[1] - element.bounds.y;
+        const leftControlX = leftControl[0] - element.bounds.x - minX;
+        const leftControlY = leftControl[1] - element.bounds.y - minY;
 
         // Detect if control points are different from anchor points
         const isPrevControlDifferent =
@@ -376,14 +371,18 @@ export function renderPolygon(element, colors, stories, offsets) {
       const firstPoint = points[0];
       const lastPoint = points[points.length - 1];
 
-      const firstAnchorX = firstPoint.anchor[0] - element.bounds.x;
-      const firstAnchorY = firstPoint.anchor[1] - element.bounds.y;
+      const firstAnchorX = firstPoint.anchor[0] - element.bounds.x - minX;
+      const firstAnchorY = firstPoint.anchor[1] - element.bounds.y - minY;
 
-      const lastRightControlX = lastPoint.rightDirection[0] - element.bounds.x;
-      const lastRightControlY = lastPoint.rightDirection[1] - element.bounds.y;
+      const lastRightControlX =
+        lastPoint.rightDirection[0] - element.bounds.x - minX;
+      const lastRightControlY =
+        lastPoint.rightDirection[1] - element.bounds.y - minY;
 
-      const firstLeftControlX = firstPoint.leftDirection[0] - element.bounds.x;
-      const firstLeftControlY = firstPoint.leftDirection[1] - element.bounds.y;
+      const firstLeftControlX =
+        firstPoint.leftDirection[0] - element.bounds.x - minX;
+      const firstLeftControlY =
+        firstPoint.leftDirection[1] - element.bounds.y - minY;
 
       const isLastControlDifferent =
         Math.abs(lastRightControlX - (lastPoint.anchor[0] - element.bounds.x)) >
@@ -460,7 +459,18 @@ export function renderPolygon(element, colors, stories, offsets) {
   }
 
   // Apply element styles to position the container
-  applyElementStyles(containerDiv, element, colors, offsets);
+  // Shift container by minX/minY so normalized path stays visually aligned
+  const normalizedOffsets = {
+    ox: (offsets?.ox || 0) + minX,
+    oy: (offsets?.oy || 0) + minY,
+  };
+  applyElementStyles(containerDiv, element, colors, normalizedOffsets);
+
+  // Ensure container sizing matches the polygon content, not original bounds
+  containerDiv.style.width = "auto";
+  containerDiv.style.height = "auto";
+  containerDiv.style.minWidth = `${width}pt`;
+  containerDiv.style.minHeight = `${height}pt`;
 
   // Handle text on path if present
   if (
@@ -694,20 +704,33 @@ export function applyElementStyles(
       ty: parent.b * child.tx + parent.d * child.ty + parent.ty,
     };
 
-    console.log("Combined transforms:", {
-      parent: element.parentTransform,
-      child: element.transform,
-      total: totalTransform,
-    });
+    // shape debug log removed
   }
 
   const x = (element.bounds?.x || 0) + totalTransform.tx + (offsets.ox || 0);
   const y = (element.bounds?.y || 0) + totalTransform.ty + (offsets.oy || 0);
 
-  domElement.style.left = `${x}px`;
-  domElement.style.top = `${y}px`;
-  domElement.style.width = `${element.bounds?.width || 0}px`;
-  domElement.style.height = `${element.bounds?.height || 0}px`;
+  domElement.style.left = `${x}pt`;
+  domElement.style.top = `${y}pt`;
+  domElement.style.width = `${element.bounds?.width || 0}pt`;
+  domElement.style.height = `${element.bounds?.height || 0}pt`;
+
+  // Positioning debug log
+  try {
+    console.debug("[IDML:position]", {
+      type: element.type,
+      name: element.name,
+      left: x,
+      top: y,
+      width: element.bounds?.width || 0,
+      height: element.bounds?.height || 0,
+      offsets,
+      bounds: element.bounds,
+      transform: element.transform || null,
+      parentTransform: element.parentTransform || null,
+      totalTransform,
+    });
+  } catch (_) {}
 
   // Apply background color only for non-SVG elements
   if (
@@ -734,7 +757,7 @@ export function applyElementStyles(
         base = applyTint(base, element.strokeTint);
       }
       if (base)
-        domElement.style.border = `${element.strokeWeight}px solid ${base}`;
+        domElement.style.border = `${element.strokeWeight}pt solid ${base}`;
     } else if (element.type === "rectangle") {
       domElement.style.border = "1px dashed red";
     }
@@ -742,7 +765,7 @@ export function applyElementStyles(
 
   if (element.dropShadow) {
     const ds = element.dropShadow;
-    domElement.style.filter = `drop-shadow(${ds.offsetX}px ${ds.offsetY}px ${ds.blurRadius}px ${ds.color})`;
+    domElement.style.filter = `drop-shadow(${ds.offsetX}pt ${ds.offsetY}pt ${ds.blurRadius}pt ${ds.color})`;
   }
 
   // Apply the total transform matrix (excluding translation which we handle via left/top)

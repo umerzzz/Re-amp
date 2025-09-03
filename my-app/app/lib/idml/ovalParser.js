@@ -6,17 +6,14 @@ import { parseGeometry, parseTransform, parseBaseShape } from "./utils";
  * @returns {Object} Parsed oval element
  */
 export function parseOval(oval) {
-  // Log the oval properties for debugging
-  console.log("Parsing Oval:", oval?.["@_Name"], "ID:", oval?.["@_Self"]);
+  // shape debug log removed
 
   // Extract the path geometry for the oval
   const bounds = parseGeometry(oval?.Properties?.PathGeometry);
 
   // If bounds are not correctly parsed, create default elliptical bounds
   if (!bounds || !bounds.points || bounds.points.length === 0) {
-    console.log(
-      "No points found for oval, extracting dimensions from transform or defaults"
-    );
+    // shape debug log removed
 
     // Calculate width and height from transform matrix
     const transform = parseTransform(oval?.["@_ItemTransform"]);
@@ -34,7 +31,7 @@ export function parseOval(oval) {
       if (isFinite(x2) && isFinite(x1) && isFinite(y2) && isFinite(y1)) {
         width = Math.abs(x2 - x1);
         height = Math.abs(y2 - y1);
-        console.log(`Using GeometryBounds dimensions: ${width}×${height}`);
+        // shape debug log removed
       }
     }
 
@@ -48,9 +45,7 @@ export function parseOval(oval) {
       points: [],
     };
 
-    console.log(
-      `Created default oval bounds: ${defaultBounds.width}×${defaultBounds.height}`
-    );
+    // shape debug log removed
 
     return {
       ...parseBaseShape(oval, "oval"),
@@ -63,7 +58,7 @@ export function parseOval(oval) {
   const transform = parseTransform(oval?.["@_ItemTransform"]);
   const textPath = oval?.TextPath;
 
-  console.log("Oval bounds:", bounds);
+  // shape debug log removed
 
   return {
     ...parseBaseShape(oval, "oval"),

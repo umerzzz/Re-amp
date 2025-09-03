@@ -39,8 +39,9 @@ export default function IDMLViewer({ idmlJson }) {
     if (!container) return;
     container.innerHTML = "";
     container.style.position = "relative";
-    container.style.width = `${docInfo.width}px`;
-    container.style.height = `${docInfo.height}px`;
+    // Use pt to respect original IDML units
+    container.style.width = `${docInfo.width}pt`;
+    container.style.height = `${docInfo.height}pt`;
     container.style.overflow = "hidden";
     const paper = pickSwatchRGB(colors, "Paper");
     container.style.background = paper || "white";
@@ -50,8 +51,11 @@ export default function IDMLViewer({ idmlJson }) {
     if (page) {
       const pageWrap = document.createElement("div");
       pageWrap.style.position = "relative";
-      pageWrap.style.width = `${docInfo.width}px`;
-      pageWrap.style.height = `${docInfo.height}px`;
+      console.log("docInfo width", docInfo.width);
+      console.log("docInfo height", docInfo.height);
+      // Use pt so page wrapper matches IDML page size
+      pageWrap.style.width = `${docInfo.width}pt`;
+      pageWrap.style.height = `${docInfo.height}pt`;
       // Add an internal overlay border so it isn't clipped by overflow
       const borderOverlay = document.createElement("div");
       borderOverlay.style.position = "absolute";

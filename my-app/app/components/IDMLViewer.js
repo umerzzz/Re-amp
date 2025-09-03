@@ -124,9 +124,11 @@ export default function IDMLViewer({ idmlJson }) {
           <ul style={{ maxHeight: "200px", overflow: "auto" }}>
             {Object.keys(characterStyles || {}).map((styleRef) => {
               const style = characterStyles[styleRef];
+              if (!style) return <li key={styleRef}>Invalid style: {styleRef}</li>;
+              
               return (
                 <li key={styleRef}>
-                  <strong>{style["@_Name"]}</strong>
+                  <strong>{style["@_Name"] || styleRef.split('/').pop() || 'Unnamed Style'}</strong>
                   {style["@_PointSize"] && (
                     <span> - Size: {style["@_PointSize"]}</span>
                   )}
@@ -146,9 +148,11 @@ export default function IDMLViewer({ idmlJson }) {
           <ul style={{ maxHeight: "200px", overflow: "auto" }}>
             {Object.keys(paragraphStyles || {}).map((styleRef) => {
               const style = paragraphStyles[styleRef];
+              if (!style) return <li key={styleRef}>Invalid style: {styleRef}</li>;
+              
               return (
                 <li key={styleRef}>
-                  <strong>{style["@_Name"]}</strong>
+                  <strong>{style["@_Name"] || styleRef.split('/').pop() || 'Unnamed Style'}</strong>
                   {style["@_Justification"] && (
                     <span> - Alignment: {style["@_Justification"]}</span>
                   )}

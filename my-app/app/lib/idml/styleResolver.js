@@ -137,18 +137,22 @@ function resolveAllStyles(idmlData) {
 
     // Resolve each character style
     characterStyleRefs.forEach((styleRef) => {
-      resolvedStyles.characterStyles[styleRef] = resolveCharacterStyle(
-        styleRef,
-        idmlData
-      );
+      const resolved = resolveCharacterStyle(styleRef, idmlData);
+      if (resolved) {
+        resolvedStyles.characterStyles[styleRef] = resolved;
+      } else {
+        console.warn(`Could not resolve character style: ${styleRef}`);
+      }
     });
 
     // Resolve each paragraph style
     paragraphStyleRefs.forEach((styleRef) => {
-      resolvedStyles.paragraphStyles[styleRef] = resolveParagraphStyle(
-        styleRef,
-        idmlData
-      );
+      const resolved = resolveParagraphStyle(styleRef, idmlData);
+      if (resolved) {
+        resolvedStyles.paragraphStyles[styleRef] = resolved;
+      } else {
+        console.warn(`Could not resolve paragraph style: ${styleRef}`);
+      }
     });
   } catch (error) {
     console.error("Error resolving all styles:", error);

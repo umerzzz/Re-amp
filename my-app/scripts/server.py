@@ -5,7 +5,8 @@ import os
 git_bash = os.getenv('GIT_BASH_PATH', r"C:\Program Files\Git\bin\bash.exe")
 
 # InDesign Server directory - configurable via environment variable
-ids_dir = os.getenv('INDESIGN_SERVER_DIR', r"C:\Program Files\Adobe\Adobe InDesign Server 2025")
+# please remove the underscore after the \Adobe
+ids_dir = os.getenv('INDESIGN_SERVER_DIR', r"C:\Program Files\Adobe_\Adobe InDesign Server 2025")
 
 # InDesign Server port - configurable via environment variable
 server_port = os.getenv('INDESIGN_SERVER_PORT', '1235')

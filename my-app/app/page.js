@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 const IDMLViewer = dynamic(() => import("./components/IDMLViewer"), {
   ssr: false,
 });
@@ -12,6 +13,7 @@ export default function Home() {
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState(null);
   const inputRef = useRef(null);
+  const router = useRouter();
 
   const onDrop = useCallback((event) => {
     event.preventDefault();
@@ -53,6 +55,9 @@ export default function Home() {
       const res = await fetch("/api/upload", { method: "POST", body: form });
       const json = await res.json();
       setResult(json);
+      if (json?.uploadId) {
+        router.push(`/view/${encodeURIComponent(json.uploadId)}`);
+      }
     } catch (e) {
       setResult({ error: "Upload failed" });
     } finally {
@@ -142,6 +147,45 @@ export default function Home() {
               {JSON.stringify(result, null, 2)}
             </pre>
           </details>
+        )}
+        {uploading && (
+          <div className="uploadOverlay" aria-live="polite" aria-busy="true">
+            <div className="spinner" />
+            <div className="message">Uploading and processing…</div>
+            <style jsx>{`
+              .uploadOverlay {
+                position: fixed;
+                inset: 0;
+                background: rgba(255, 255, 255, 0.6);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 1000;
+                backdrop-filter: blur(1px);
+              }
+              .spinner {
+                width: 28px;
+                height: 28px;
+                border: 3px solid #cfd8dc;
+                border-top-color: #0070f3;
+                border-radius: 50%;
+                animation: spin 0.8s linear infinite;
+                margin-right: 10px;
+              }
+              .message {
+                font-size: 14px;
+                color: #333;
+              }
+              @keyframes spin {
+                0% {
+                  transform: rotate(0deg);
+                }
+                100% {
+                  transform: rotate(360deg);
+                }
+              }
+            `}</style>
+          </div>
         )}
       </main>
     </div>

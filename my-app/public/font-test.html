@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Font Test</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        padding: 20px;
+      }
+      .test-container {
+        margin: 20px 0;
+        padding: 15px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+      }
+      .font-sample {
+        font-size: 20px;
+        margin-bottom: 10px;
+      }
+      .font-info {
+        color: #666;
+        font-size: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Custom Font Testing</h1>
+    <div id="upload-id-display">Upload ID: <span id="upload-id"></span></div>
+    <div id="font-list-container">
+      <h2>Fonts Available:</h2>
+      <ul id="font-list"></ul>
+    </div>
+    <div id="font-samples-container"></div>
+
+    <script>
+      // Get the upload ID from the URL
+      const params = new URLSearchParams(window.location.search);
+      const uploadId = params.get("uploadId");
+
+      if (!uploadId) {
+        document.body.innerHTML = "<h1>No upload ID provided</h1>";
+      } else {
+        document.getElementById("upload-id").textContent = uploadId;
+        loadFontList(uploadId);
+      }
+
+      async function loadFontList(uploadId) {
+        try {
+          const response = await fetch(
+            `/api/fonts?uploadId=${encodeURIComponent(uploadId)}`
+          );
+
+          if (!response.ok) {
+            throw new Error(`Failed to fetch fonts: ${response.statusText}`);
+          }
+
+          const fonts = await response.json();
+          displayFontList(fonts, uploadId);
+        } catch (error) {
+          console.error("Error loading fonts:", error);
+          document.getElementById(
+            "font-list"
+          ).innerHTML = `<li class="error">Error loading fonts: ${error.message}</li>`;
+        }
+      }
+
+      function displayFontList(fonts, uploadId) {
+        const fontList = document.getElementById("font-list");
+        const sampleContainer = document.getElementById(
+          "font-samples-container"
+        );
+
+        if (fonts.length === 0) {
+          fontList.innerHTML = "<li>No fonts found for this upload</li>";
+          return;
+        }
+
+        // Clear containers
+        fontList.innerHTML = "";
+        sampleContainer.innerHTML = "";
+
+        // Create style element for @font-face declarations
+        const styleEl = document.createElement("style");
+        document.head.appendChild(styleEl);
+
+        // Add each font
+        fonts.forEach((font) => {
+          // Add to list
+          const li = document.createElement("li");
+          li.textContent = font.name;
+          fontList.appendChild(li);
+
+          // Create font face
+          const fontName = font.name.split(".")[0].replace(/[^\w-]/g, "-");
+          const fontPath = `/uploads/${uploadId}/Fonts/${font.name}`;
+
+          // Add @font-face rule
+          styleEl.sheet.insertRule(`
+          @font-face {
+            font-family: "${fontName}";
+            src: url("${fontPath}");
+          }
+        `);
+
+          // Create sample
+          const sampleDiv = document.createElement("div");
+          sampleDiv.className = "test-container";
+          sampleDiv.innerHTML = `
+          <div class="font-info">Font: ${font.name}</div>
+          <div class="font-sample" style="font-family: '${fontName}', sans-serif">
+            ABCDEFGHIJKLMNOPQRSTUVWXYZ<br>
+            abcdefghijklmnopqrstuvwxyz<br>
+            0123456789 !@#$%^&*()_+
+          </div>
+        `;
+          sampleContainer.appendChild(sampleDiv);
+        });
+      }
+    </script>
+  </body>
+</html>

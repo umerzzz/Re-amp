@@ -5,11 +5,13 @@ import {
   createElement,
   computeOffsets,
   pickSwatchRGB,
+  loadCustomFonts,
 } from "../lib/idmlRenderUtils";
 
-export default function IDMLViewer({ idmlJson }) {
+export default function IDMLViewer({ idmlJson, uploadId }) {
   const containerRef = useRef(null);
   const [currentPage, setCurrentPage] = useState(0);
+  const [loadedFonts, setLoadedFonts] = useState([]);
 
   const {
     parser,
@@ -63,6 +65,24 @@ export default function IDMLViewer({ idmlJson }) {
     };
   }, [idmlJson]);
 
+  // Load custom fonts when component mounts or uploadId changes
+  useEffect(() => {
+    async function loadFonts() {
+      if (uploadId) {
+        console.log("Loading custom fonts for upload:", uploadId);
+        try {
+          const fonts = await loadCustomFonts(uploadId);
+          setLoadedFonts(fonts);
+          console.log("Loaded fonts:", fonts);
+        } catch (error) {
+          console.error("Error loading fonts:", error);
+        }
+      }
+    }
+
+    loadFonts();
+  }, [uploadId]);
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -111,6 +131,19 @@ export default function IDMLViewer({ idmlJson }) {
 
   return (
     <div>
+      {loadedFonts.length > 0 && (
+        <div
+          style={{
+            padding: "8px",
+            backgroundColor: "#f0f9ff",
+            borderRadius: "4px",
+            fontSize: "0.9rem",
+            marginBottom: "10px",
+          }}
+        >
+          <strong>Loaded Fonts:</strong> {loadedFonts.join(", ")}
+        </div>
+      )}
       <div ref={containerRef} />
 
       {/* Style Information Section */}
@@ -124,11 +157,16 @@ export default function IDMLViewer({ idmlJson }) {
           <ul style={{ maxHeight: "200px", overflow: "auto" }}>
             {Object.keys(characterStyles || {}).map((styleRef) => {
               const style = characterStyles[styleRef];
-              if (!style) return <li key={styleRef}>Invalid style: {styleRef}</li>;
-              
+              if (!style)
+                return <li key={styleRef}>Invalid style: {styleRef}</li>;
+
               return (
                 <li key={styleRef}>
-                  <strong>{style["@_Name"] || styleRef.split('/').pop() || 'Unnamed Style'}</strong>
+                  <strong>
+                    {style["@_Name"] ||
+                      styleRef.split("/").pop() ||
+                      "Unnamed Style"}
+                  </strong>
                   {style["@_PointSize"] && (
                     <span> - Size: {style["@_PointSize"]}</span>
                   )}
@@ -148,11 +186,16 @@ export default function IDMLViewer({ idmlJson }) {
           <ul style={{ maxHeight: "200px", overflow: "auto" }}>
             {Object.keys(paragraphStyles || {}).map((styleRef) => {
               const style = paragraphStyles[styleRef];
-              if (!style) return <li key={styleRef}>Invalid style: {styleRef}</li>;
-              
+              if (!style)
+                return <li key={styleRef}>Invalid style: {styleRef}</li>;
+
               return (
                 <li key={styleRef}>
-                  <strong>{style["@_Name"] || styleRef.split('/').pop() || 'Unnamed Style'}</strong>
+                  <strong>
+                    {style["@_Name"] ||
+                      styleRef.split("/").pop() ||
+                      "Unnamed Style"}
+                  </strong>
                   {style["@_Justification"] && (
                     <span> - Alignment: {style["@_Justification"]}</span>
                   )}

@@ -101,11 +101,23 @@ export default async function handler(req, res) {
         .filter((seg) => seg && seg !== "." && seg !== "..")
         .join("/");
 
-      // Create a folder for this file within the timestamp folder
-      const fileFolderName = safeRelative
-        .replace(/[^a-zA-Z0-9-_]/g, "-")
-        .substring(0, 50);
-      const fileDir = path.join(uploadRoot, fileFolderName);
+      // Check if this is a font file
+      const isFont = /\.(otf|ttf|woff|woff2|eot|tiff)$/i.test(originalName);
+
+      // For font files, they'll be processed by the font processor script later
+      // For other files, create a folder for each file within the timestamp folder
+      let fileDir;
+      if (isFont) {
+        // For fonts, just put them in a "FontUploads" folder to be processed later
+        fileDir = path.join(uploadRoot, "FontUploads");
+      } else {
+        // For other files like IDML/INDD, create individual folders
+        const fileFolderName = safeRelative
+          .replace(/[^a-zA-Z0-9-_]/g, "-")
+          .substring(0, 50);
+        fileDir = path.join(uploadRoot, fileFolderName);
+      }
+
       await fs.promises.mkdir(fileDir, { recursive: true });
 
       const destPath = path.resolve(fileDir, path.basename(safeRelative));
@@ -144,6 +156,43 @@ export default async function handler(req, res) {
           JSON.stringify(xmlJson, null, 2),
           "utf8"
         );
+
+        // Process fonts in the upload directory and parent directories
+        try {
+          const { spawn } = require("child_process");
+          const fontProcessorScript = path.join(
+            process.cwd(),
+            "scripts",
+            "font_processor.py"
+          );
+
+          // Use the upload root directory for font processing
+          // This ensures the Fonts directory is created at the right level
+          const dirToScan = uploadRoot;
+
+          // Run the font processor script
+          console.log(`Processing fonts in ${dirToScan}...`);
+          const fontProcess = spawn("python", [fontProcessorScript, dirToScan]);
+
+          // Log script output
+          fontProcess.stdout.on("data", (data) => {
+            console.log(`Font processor: ${data}`);
+          });
+
+          fontProcess.stderr.on("data", (data) => {
+            console.error(`Font processor error: ${data}`);
+          });
+
+          // Wait for script to finish (optional)
+          await new Promise((resolve) => {
+            fontProcess.on("close", (code) => {
+              console.log(`Font processor exited with code ${code}`);
+              resolve();
+            });
+          });
+        } catch (fontProcessError) {
+          console.error("Error processing fonts:", fontProcessError);
+        }
 
         const fileInfo = {
           name: originalName,

@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import IDMLViewer from "../../components/IDMLViewer";
+import FontPreview from "../../components/FontPreview";
 
 async function readFirstIdmlJson(uploadId) {
   const uploadDir = path.join(process.cwd(), "uploads", uploadId);
@@ -57,17 +58,32 @@ export default async function ViewPage({ params }) {
   return (
     <div style={{ padding: 24 }}>
       <h1>Upload: {uploadId}</h1>
+
+      {/* Font Preview Section */}
+      <div
+        style={{
+          marginBottom: 30,
+          padding: 15,
+          backgroundColor: "#f8f9fa",
+          borderRadius: 8,
+        }}
+      >
+        <FontPreview uploadId={uploadId} />
+      </div>
+
+      {/* IDML Viewer Section */}
       {idmlJson ? (
         <div
           style={{
             marginTop: 24,
             display: "flex",
+            flexDirection: "column",
             alignItems: "center",
             justifyContent: "center",
             width: "100%",
           }}
         >
-          <IDMLViewer idmlJson={idmlJson} />
+          <IDMLViewer idmlJson={idmlJson} uploadId={uploadId} />
         </div>
       ) : (
         <p>No IDML data found for this upload.</p>

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { IDMLParser } from "../lib/idmlParser";
 import {
   createElement,
@@ -9,6 +9,7 @@ import {
 
 export default function IDMLViewer({ idmlJson }) {
   const containerRef = useRef(null);
+  const [currentPage, setCurrentPage] = useState(0);
 
   const { parser, docInfo, pages, colors, stories } = useMemo(() => {
     console.log(
@@ -39,45 +40,73 @@ export default function IDMLViewer({ idmlJson }) {
     container.innerHTML = "";
     container.style.position = "relative";
     container.style.width = `${docInfo.width}px`;
-    container.style.minHeight = `${docInfo.height}px`;
+    container.style.height = `${docInfo.height}px`;
     container.style.overflow = "hidden";
     const paper = pickSwatchRGB(colors, "Paper");
     container.style.background = paper || "white";
-    container.style.border = "1px solid #ddd";
-
-    let pageIndex = 0;
-    for (const page of pages) {
+    // Render only the currently selected page
+    const safeIndex = Math.max(0, Math.min(currentPage, pages.length - 1));
+    const page = pages[safeIndex];
+    if (page) {
       const pageWrap = document.createElement("div");
       pageWrap.style.position = "relative";
       pageWrap.style.width = `${docInfo.width}px`;
       pageWrap.style.height = `${docInfo.height}px`;
-      pageWrap.style.marginBottom = "24px";
+      // Add an internal overlay border so it isn't clipped by overflow
+      const borderOverlay = document.createElement("div");
+      borderOverlay.style.position = "absolute";
+      borderOverlay.style.left = "0";
+      borderOverlay.style.top = "0";
+      borderOverlay.style.right = "0";
+      borderOverlay.style.bottom = "0";
+      borderOverlay.style.border = "3px dashed #bbb";
+      borderOverlay.style.pointerEvents = "none";
       pageWrap.setAttribute(
         "data-page",
-        String(page.pageName ?? pageIndex + 1)
+        String(page.pageName ?? safeIndex + 1)
       );
       const offsets = computeOffsets(page.elements);
       for (const el of page.elements) {
         const dom = createElement(el, colors, stories, offsets);
         if (dom) pageWrap.appendChild(dom);
       }
+      // ensure border overlay sits on top
+      pageWrap.appendChild(borderOverlay);
       container.appendChild(pageWrap);
-      if (pageIndex < pages.length - 1) {
-        const sep = document.createElement("div");
-        sep.style.width = `${docInfo.width}px`;
-        sep.style.height = "0";
-        sep.style.borderTop = "2px dashed #bbb";
-        sep.style.margin = "12px 0 24px 0";
-        sep.setAttribute("aria-hidden", "true");
-        container.appendChild(sep);
-      }
-      pageIndex += 1;
     }
-  }, [docInfo, pages, colors, stories]);
+  }, [docInfo, pages, colors, stories, currentPage]);
 
   return (
     <div>
       <div ref={containerRef} />
+      {pages?.length > 1 && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            marginTop: 8,
+          }}
+        >
+          <button
+            onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
+            disabled={currentPage <= 0}
+          >
+            Prev
+          </button>
+          <span style={{ fontSize: 12 }}>
+            Page {currentPage + 1} / {pages.length}
+          </span>
+          <button
+            onClick={() =>
+              setCurrentPage((p) => Math.min(pages.length - 1, p + 1))
+            }
+            disabled={currentPage >= pages.length - 1}
+          >
+            Next
+          </button>
+        </div>
+      )}
     </div>
   );
 }

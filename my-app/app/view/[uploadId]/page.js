@@ -58,7 +58,15 @@ export default async function ViewPage({ params }) {
     <div style={{ padding: 24 }}>
       <h1>Upload: {uploadId}</h1>
       {idmlJson ? (
-        <div style={{ marginTop: 24 }}>
+        <div
+          style={{
+            marginTop: 24,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: "100%",
+          }}
+        >
           <IDMLViewer idmlJson={idmlJson} />
         </div>
       ) : (

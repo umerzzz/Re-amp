@@ -493,13 +493,26 @@ export function renderTextFrame(element, colors, stories, offsets) {
 
     const inner = document.createElement("div");
     inner.style.position = "absolute";
-    inner.style.left = `${insets.left}px`;
-    inner.style.top = `${insets.top}px`;
-    inner.style.right = `${insets.right}px`;
-    inner.style.bottom = `${insets.bottom}px`;
-    inner.style.height = `calc(100% - ${insets.top + insets.bottom}px)`;
-    inner.style.width = `calc(100% - ${insets.left + insets.right}px)`;
+    inner.style.left = `${insets.left}pt`;
+    inner.style.top = `${insets.top}pt`;
+    inner.style.right = `${insets.right}pt`;
+    inner.style.bottom = `${insets.bottom}pt`;
+    inner.style.height = `calc(100% - ${insets.top + insets.bottom}pt)`;
+    inner.style.width = `calc(100% - ${insets.left + insets.right}pt)`;
     inner.style.overflow = "hidden";
+
+    // First baseline handling (approximation)
+    const firstBaseline = String(prefs.firstBaselineOffset || "");
+    const minFirstBaseline = parseFloat(prefs.minimumFirstBaselineOffset) || 0;
+    if (
+      firstBaseline === "Fixed" ||
+      firstBaseline === "CapHeight" ||
+      firstBaseline === "LeadingOffset"
+    ) {
+      // Add additional top padding to approximate first-baseline offset
+      const existingPadTop = 0;
+      inner.style.paddingTop = `${existingPadTop + minFirstBaseline}pt`;
+    }
 
     if (cols > 1) {
       const totalWidth = Math.max(
@@ -522,19 +535,39 @@ export function renderTextFrame(element, colors, stories, offsets) {
     else if (vj === "BottomAlign") inner.style.justifyContent = "flex-end";
     else if (vj === "JustifyAlign")
       inner.style.justifyContent = "space-between";
-    else inner.style.justifyContent = "flex-start";
+    else inner.style.justifyContent = "flex-start"; // TopAlign and default
 
     const paras = story.paragraphs || [];
     for (const p of paras) {
       const pEl = document.createElement("div");
-      if (p.justification === "CenterAlign") pEl.style.textAlign = "center";
-      if (p.justification === "RightAlign") pEl.style.textAlign = "right";
+      const just = String(p.justification || "");
+      if (just === "CenterAlign" || just === "CenterJustified")
+        pEl.style.textAlign = "center";
+      else if (just === "RightAlign" || just === "RightJustified")
+        pEl.style.textAlign = "right";
+      else if (just === "LeftAlign" || just === "LeftJustified" || just === "")
+        pEl.style.textAlign = "left";
+      else if (just === "JustifyAll" || just === "JustifyAlign")
+        pEl.style.textAlign = "justify";
+
+      if (isFinite(p.leftIndent)) pEl.style.paddingLeft = `${p.leftIndent}pt`;
+      if (isFinite(p.rightIndent))
+        pEl.style.paddingRight = `${p.rightIndent}pt`;
+      if (isFinite(p.firstLineIndent))
+        pEl.style.textIndent = `${p.firstLineIndent}pt`;
+      if (isFinite(p.spaceBefore)) pEl.style.marginTop = `${p.spaceBefore}pt`;
+      if (isFinite(p.spaceAfter)) pEl.style.marginBottom = `${p.spaceAfter}pt`;
+      if (isFinite(p.leading)) pEl.style.lineHeight = `${p.leading}pt`;
+
       pEl.style.whiteSpace = "pre-wrap";
       for (const s of p.spans || []) {
         const span = document.createElement("span");
         span.textContent = s.text || "";
         if (s.font) span.style.fontFamily = s.font;
-        if (s.fontSize) span.style.fontSize = `${s.fontSize}px`;
+        // Prefer explicit point size; default to treating fontSize as points
+        const pointSize =
+          typeof s.pointSize === "number" ? s.pointSize : s.fontSize;
+        if (pointSize) span.style.fontSize = `${pointSize}pt`;
         if (s.fontStyle) {
           if (String(s.fontStyle).toLowerCase().includes("bold")) {
             span.style.fontWeight = "700";
@@ -547,6 +580,24 @@ export function renderTextFrame(element, colors, stories, offsets) {
           const pos = String(s.position);
           if (pos === "Subscript") span.style.verticalAlign = "sub";
           else if (pos === "Superscript") span.style.verticalAlign = "super";
+        }
+        const transforms = [];
+        if (isFinite(s.horizontalScale) && Number(s.horizontalScale) !== 100) {
+          const sx = Number(s.horizontalScale) / 100;
+          transforms.push(`scaleX(${sx})`);
+        }
+        if (isFinite(s.verticalScale) && Number(s.verticalScale) !== 100) {
+          const sy = Number(s.verticalScale) / 100;
+          transforms.push(`scaleY(${sy})`);
+        }
+        if (isFinite(s.skew) && Number(s.skew) !== 0) {
+          const sk = Number(s.skew);
+          transforms.push(`skewX(${sk}deg)`);
+        }
+        if (transforms.length) {
+          span.style.display = "inline-block";
+          span.style.transformOrigin = "left bottom";
+          span.style.transform = transforms.join(" ");
         }
         if (
           s.underline === true ||
@@ -571,16 +622,15 @@ export function renderTextFrame(element, colors, stories, offsets) {
           !Number.isNaN(s.baselineShift)
         ) {
           span.style.position = "relative";
-          span.style.top = `${-s.baselineShift}px`;
+          span.style.top = `${-s.baselineShift}pt`;
         }
         if (
           s.kerningMethod === "Manual" &&
           typeof s.kerningValue === "number"
         ) {
-          const size = s.fontSize || 12;
+          // Use em so it scales naturally with font size
           const em = s.kerningValue / 1000;
-          const px = em * size;
-          span.style.letterSpacing = `${px}px`;
+          span.style.letterSpacing = `${em}em`;
         }
         if (s.capitalization) {
           const cap = String(s.capitalization);
@@ -842,7 +892,9 @@ export function appendTextOnPath(
   ) {
     const span = story.paragraphs[0].spans[0];
     if (span.font) textPath.setAttribute("font-family", span.font);
-    if (span.fontSize) textPath.setAttribute("font-size", `${span.fontSize}px`);
+    const pointSize =
+      typeof span.pointSize === "number" ? span.pointSize : span.fontSize;
+    if (pointSize) textPath.setAttribute("font-size", `${pointSize}pt`);
     if (span.fillColor) {
       const color = resolveSwatchRGB(colors, span.fillColor);
       if (color) textPath.setAttribute("fill", color);

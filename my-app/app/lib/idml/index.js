@@ -1,15 +1,15 @@
-import { parseRectangle } from "./rectangleParser";
-import { parsePolygon } from "./polygonParser";
-import { parseOval } from "./ovalParser";
-import { parseTextFrame } from "./textFrameParser";
-import { parseStoryContent } from "./storyParser";
-import { convertToCssRGB } from "./utils";
+import { parseRectangle } from "./Parsers/rectangleParser.js";
+import { parsePolygon } from "./Parsers/polygonParser.js";
+import { parseOval } from "./Parsers/ovalParser.js";
+import { parseTextFrame } from "./Parsers/textFrameParser.js";
+import { parseStoryContent } from "./Parsers/storyParser.js";
+import { convertToCssRGB } from "./utils.js";
 import {
   resolveAllStyles,
   resolveCharacterStyle,
   resolveParagraphStyle,
   enrichContentWithStyles,
-} from "./styleResolver";
+} from "./Processors/styleResolver.js";
 
 /**
  * Main IDML Parser class that coordinates parsing of IDML JSON data

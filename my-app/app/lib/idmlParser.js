@@ -1,5 +1,5 @@
 // Import from modularized code
-import { IDMLParser as ModularIDMLParser } from "./idml/index";
+import { IDMLParser as ModularIDMLParser } from "./idml/index.js";
 
 export class IDMLParser extends ModularIDMLParser {
   // This class extends the modularized version to maintain the same API for backwards compatibility

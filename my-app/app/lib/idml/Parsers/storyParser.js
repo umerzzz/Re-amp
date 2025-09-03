@@ -1,4 +1,4 @@
-// No utils imports needed for story parsingmport { convertToCssRGB } from "./utils";
+// No utils imports needed for story parsing
 
 /**
  * Parse story content from IDML data

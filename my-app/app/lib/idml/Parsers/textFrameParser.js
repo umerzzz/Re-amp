@@ -3,7 +3,7 @@ import {
   parseTransform,
   parseBaseShape,
   parseDropShadow,
-} from "./utils";
+} from "../utils.js";
 
 /**
  * Parse text frame element from IDML data

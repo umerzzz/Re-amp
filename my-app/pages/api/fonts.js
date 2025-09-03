@@ -23,6 +23,26 @@ export default async function handler(req, res) {
 
     console.log(`Checking for fonts in directories:`, fontsDirs);
 
+    // Helper to sanitize font filenames (remove spaces and apostrophes only)
+    const sanitizeFontFileName = (name) => {
+      const ext = path.extname(name);
+      const base = path.basename(name, ext);
+      const cleanedBase = base.replace(/[ '\u00B4`]/g, "");
+      return `${cleanedBase}${ext}`;
+    };
+
+    // Ensure a unique filename within a directory
+    const ensureUniqueName = async (dir, desired) => {
+      let candidate = desired;
+      let counter = 1;
+      while (fs.existsSync(path.join(dir, candidate))) {
+        const ext = path.extname(desired);
+        const base = path.basename(desired, ext);
+        candidate = `${base}-${counter++}${ext}`;
+      }
+      return candidate;
+    };
+
     // Collect all font files from all directories
     const allFontFiles = [];
 
@@ -38,16 +58,44 @@ export default async function handler(req, res) {
         // Get list of files in the directory
         const files = await fs.promises.readdir(dirPath);
 
-        // Filter for font files
-        const fontFiles = files
-          .filter((file) =>
-            FONT_EXTENSIONS.some((ext) => file.toLowerCase().endsWith(ext))
-          )
-          .map((file) => ({
-            name: file,
-            path: `/uploads/${uploadId}/${path.basename(dirPath)}/${file}`,
+        const fontFiles = [];
+        for (const file of files) {
+          // Only consider supported font extensions
+          if (
+            !FONT_EXTENSIONS.some((ext) => file.toLowerCase().endsWith(ext))
+          ) {
+            continue;
+          }
+
+          // Sanitize filenames by removing spaces and apostrophes
+          const sanitized = sanitizeFontFileName(file);
+          let finalName = file;
+
+          if (sanitized !== file) {
+            try {
+              const fromPath = path.join(dirPath, file);
+              let toName = await ensureUniqueName(dirPath, sanitized);
+              const toPath = path.join(dirPath, toName);
+              await fs.promises.rename(fromPath, toPath);
+              finalName = toName;
+              console.log(
+                `Renamed font '${file}' -> '${toName}' in ${dirPath}`
+              );
+            } catch (renameErr) {
+              console.warn(
+                `Failed to rename font '${file}' in ${dirPath}:`,
+                renameErr
+              );
+              finalName = file; // fall back to original
+            }
+          }
+
+          fontFiles.push({
+            name: finalName,
+            path: `/uploads/${uploadId}/${path.basename(dirPath)}/${finalName}`,
             directory: path.basename(dirPath),
-          }));
+          });
+        }
 
         // Add to our collection
         allFontFiles.push(...fontFiles);

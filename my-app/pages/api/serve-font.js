@@ -24,13 +24,18 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Invalid font file type" });
     }
 
+    // Sanitize requested font name (must match the rename logic: remove spaces/apostrophes)
+    const ext = path.extname(fontName);
+    const base = path.basename(fontName, ext).replace(/[ '\u00B4`]/g, "");
+    const sanitizedFontName = `${base}${ext}`;
+
     // Path to font file
     let fontPath = path.join(
       process.cwd(),
       "uploads",
       uploadId,
       "Fonts",
-      fontName
+      sanitizedFontName
     );
 
     // Check if file exists
@@ -41,7 +46,7 @@ export default async function handler(req, res) {
         "uploads",
         uploadId,
         "FontUploads",
-        fontName
+        sanitizedFontName
       );
 
       if (!fs.existsSync(altFontPath)) {

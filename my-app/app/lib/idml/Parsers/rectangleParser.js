@@ -1,4 +1,4 @@
-import { parseGeometry, parseTransform, parseBaseShape } from "./utils";
+import { parseGeometry, parseTransform, parseBaseShape } from "../utils.js";
 
 /**
  * Parse rectangle element from IDML data
